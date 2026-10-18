@@ -1,0 +1,8 @@
+{
+  "options.antialiasing": "抗锯齿",
+  "options.antialiasing.tooltip": "此选项控制抗锯齿相关设置。\n\n可用的选项：FXAA、SMAA、TAA",
+  "options.antialiasing.mode.0": "关闭",
+  "options.antialiasing.mode.1": "FXAA",
+  "options.antialiasing.mode.2": "SMAA",
+  "options.antialiasing.mode.3": "TAA"
+}

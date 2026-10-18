@@ -1,0 +1,120 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+	id "org.jetbrains.kotlin.jvm" version "2.4.21"
+}
+
+repositories {
+	// Add repositories to retrieve artifacts from in here.
+	// You should only use this when depending on other mods because
+	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
+	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
+	// for more information about repositories.
+	maven {
+		name = "Terraformers"
+		url = "https://maven.terraformersmc.com/"
+	}
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"aamod" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+}
+
+dependencies {
+	// To change the versions see the gradle.properties file
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+	// Fabric API. This is technically optional, but you probably want it anyway.
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    implementation "net.fabricmc:fabric-language-kotlin:${project.fabric_kotlin_version}"
+
+	// Mod Menu
+	implementation("com.terraformersmc:modmenu:${project.modmenu_version}")
+}
+
+processResources {
+	def version = project.version
+	def name = project.property("name")
+	def modid = project.property("modid")
+	def author = project.property("author")
+	def license = project.property("license")
+	def mcversion = project.property("minecraft_version")
+	def fabricversion = project.property("loader_version")
+	def classpath = project.property("group")
+	inputs.property "version", version
+	inputs.property "name", name
+	inputs.property "modid", modid
+	inputs.property "classpath", classpath
+	inputs.property "author", author
+	inputs.property "license", license
+	inputs.property "mcversion", mcversion
+	inputs.property "fabricversion", fabricversion
+	filteringCharset "UTF-8"
+
+	filesMatching("fabric.mod.json") {
+		expand  "version": version,
+				"name": name,
+				"modid" : modid,
+				"classpath": classpath,
+				"author": author,
+				"license": license,
+				"mcversion": mcversion,
+				"fabricversion": fabricversion
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 25
+}
+
+kotlin {
+	compilerOptions {
+		jvmTarget = JvmTarget.JVM_25
+	}
+}
+
+java {
+	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
+	// if it is present.
+	// If you remove this line, sources will not be generated.
+	withSourcesJar()
+
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
+}
+
+jar {
+	def projectName = project.name
+	inputs.property "projectName", projectName
+
+	from("LICENSE") {
+		rename { "${it}_$projectName"}
+	}
+}
+
+// configure the maven publication
+publishing {
+	publications {
+		create("mavenJava", MavenPublication) {
+			from components.java
+		}
+	}
+
+	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
+	repositories {
+		// Add repositories to publish to here.
+		// Notice: This block does NOT have the same function as the block in the top level.
+		// The repositories here will be used for publishing your artifact, not for
+		// retrieving dependencies.
+	}
+}
