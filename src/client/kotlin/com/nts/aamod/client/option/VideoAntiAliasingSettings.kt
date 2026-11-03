@@ -40,7 +40,7 @@ object VideoAntiAliasingSettings {
 
     private fun getModeKey(mode: Int) = "options.antialiasing.mode.$mode"
 
-    // 预设正在写这个选项（或正在从 options.txt 恢复）：此时不要把画质预设打成"自定义"
+    // 阻止特殊情况的预设跳变
     private var suppressPresetCustom = false
 
     // 写取值但不动画质预设
