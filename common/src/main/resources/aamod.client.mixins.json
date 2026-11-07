@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "package": "com.nts.aamod.client.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "minVersion": "0.8",
+  "mixins": [
+    "option.OptionsAccessor",
+    "option.VideoSettingScreenMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

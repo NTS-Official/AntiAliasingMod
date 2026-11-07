@@ -1,0 +1,90 @@
+plugins {
+    id 'com.gradleup.shadow'
+}
+
+architectury {
+    platformSetupLoomIde()
+    neoForge()
+}
+
+configurations {
+    common {
+        canBeResolved = true
+        canBeConsumed = false
+    }
+    compileClasspath.extendsFrom common
+    runtimeClasspath.extendsFrom common
+    developmentNeoForge.extendsFrom common
+
+    shadowCommon {
+        canBeResolved = true
+        canBeConsumed = false
+    }
+}
+
+repositories {
+    maven {
+        name = 'NeoForged'
+        url = 'https://maven.neoforged.net/releases/'
+        content { includeGroupByRegex 'net\\.neoforged.*' }
+    }
+    maven {
+        name = 'KotlinForForge'
+        url = 'https://thedarkcolour.github.io/KotlinForForge/'
+        content { includeGroup 'thedarkcolour' }
+    }
+}
+
+dependencies {
+    neoForge "net.neoforged:neoforge:${rootProject.neoforge_version}"
+
+    api "dev.architectury:architectury-neoforge:${rootProject.architectury_api_version}"
+
+    // Kotlin 运行时由 Kotlin for Forge 提供：只作用于开发运行环境，不打包进成品；
+    // 玩家侧依赖写在 neoforge.mods.toml 里。
+    localRuntime("thedarkcolour:kotlinforforge-neoforge:${rootProject.kotlin_for_forge_version}") {
+        exclude group: 'net.neoforged.fancymodloader', module: 'loader'
+    }
+
+    common(project(path: ':common')) { transitive false }
+    shadowCommon(project(path: ':common', configuration: 'transformProductionNeoForge')) { transitive false }
+}
+
+jar {
+    archiveClassifier = 'raw'
+}
+
+shadowJar {
+    dependsOn(jar)
+    exclude 'architectury.common.json'
+    mainSpec.sourcePaths.clear()
+    from(zipTree(jar.archiveFile))
+    configurations = [project.configurations.shadowCommon]
+    archiveClassifier = null
+}
+
+sourcesJar {
+    def commonSources = project(':common').sourcesJar
+    dependsOn commonSources
+    from commonSources.archiveFile.map { zipTree(it) }
+}
+
+configurations {
+    apiElements {
+        outgoing.artifacts.clear()
+        outgoing.artifact(shadowJar)
+    }
+    runtimeElements {
+        outgoing.artifacts.clear()
+        outgoing.artifact(shadowJar)
+    }
+}
+
+publishing {
+    publications {
+        create('mavenNeoForge', MavenPublication) {
+            artifactId = base.archivesName.get()
+            from components.java
+        }
+    }
+}

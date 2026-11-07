@@ -1,120 +1,101 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-	id 'net.fabricmc.fabric-loom' version "${loom_version}"
-	id 'maven-publish'
-	id "org.jetbrains.kotlin.jvm" version "2.4.21"
+    id 'dev.architectury.loom-no-remap' version "${loom_version}" apply false
+    id 'architectury-plugin' version "${architectury_plugin_version}"
+    id 'com.gradleup.shadow' version "${shadow_version}" apply false
+    id 'org.jetbrains.kotlin.jvm' version "${kotlin_version}" apply false
 }
 
-repositories {
-	// Add repositories to retrieve artifacts from in here.
-	// You should only use this when depending on other mods because
-	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
-	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
-	// for more information about repositories.
-	maven {
-		name = "Terraformers"
-		url = "https://maven.terraformersmc.com/"
-	}
+architectury {
+    minecraft = rootProject.minecraft_version
 }
 
-loom {
-	splitEnvironmentSourceSets()
-
-	mods {
-		"aamod" {
-			sourceSet sourceSets.main
-			sourceSet sourceSets.client
-		}
-	}
+allprojects {
+    group = rootProject.mod_group
+    version = rootProject.mod_version
 }
 
-dependencies {
-	// To change the versions see the gradle.properties file
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+def metadata = [
+        mod_id                    : rootProject.mod_id,
+        mod_name                  : rootProject.mod_name,
+        mod_version               : rootProject.mod_version,
+        mod_author                : rootProject.mod_author,
+        mod_license               : rootProject.mod_license,
+        mod_group                 : rootProject.mod_group,
+        minecraft_version         : rootProject.minecraft_version,
+        java_version              : rootProject.java_version,
+        fabric_loader_version     : rootProject.fabric_loader_version,
+        architectury_api_version  : rootProject.architectury_api_version,
+        kotlin_for_forge_version  : rootProject.kotlin_for_forge_version,
+]
 
-	// Fabric API. This is technically optional, but you probably want it anyway.
-	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-    implementation "net.fabricmc:fabric-language-kotlin:${project.fabric_kotlin_version}"
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'dev.architectury.loom-no-remap'
+    apply plugin: 'architectury-plugin'
+    apply plugin: 'maven-publish'
+    apply plugin: 'org.jetbrains.kotlin.jvm'
 
-	// Mod Menu
-	implementation("com.terraformersmc:modmenu:${project.modmenu_version}")
-}
+    base {
+        archivesName = "${rootProject.archives_name}-${project.name}"
+    }
 
-processResources {
-	def version = project.version
-	def name = project.property("name")
-	def modid = project.property("modid")
-	def author = project.property("author")
-	def license = project.property("license")
-	def mcversion = project.property("minecraft_version")
-	def fabricversion = project.property("loader_version")
-	def classpath = project.property("group")
-	inputs.property "version", version
-	inputs.property "name", name
-	inputs.property "modid", modid
-	inputs.property "classpath", classpath
-	inputs.property "author", author
-	inputs.property "license", license
-	inputs.property "mcversion", mcversion
-	inputs.property "fabricversion", fabricversion
-	filteringCharset "UTF-8"
+    repositories {
+        mavenCentral()
+        maven {
+            name = 'Fabric'
+            url = 'https://maven.fabricmc.net/'
+            content {
+                includeGroup 'net.fabricmc'
+                includeGroup 'net.fabricmc.fabric-api'
+            }
+        }
+        maven {
+            name = 'Architectury'
+            url = 'https://maven.architectury.dev/'
+            content { includeGroupByRegex 'dev\\.architectury.*' }
+        }
+        maven {
+            name = 'Terraformers'
+            url = 'https://maven.terraformersmc.com/'
+            content { includeGroup 'com.terraformersmc' }
+        }
+    }
 
-	filesMatching("fabric.mod.json") {
-		expand  "version": version,
-				"name": name,
-				"modid" : modid,
-				"classpath": classpath,
-				"author": author,
-				"license": license,
-				"mcversion": mcversion,
-				"fabricversion": fabricversion
-	}
-}
+    dependencies {
+        minecraft "com.mojang:minecraft:${rootProject.minecraft_version}"
+    }
 
-tasks.withType(JavaCompile).configureEach {
-	it.options.release = 25
-}
+    java {
+        withSourcesJar()
+        sourceCompatibility = JavaVersion.toVersion(rootProject.java_version)
+        targetCompatibility = JavaVersion.toVersion(rootProject.java_version)
+    }
 
-kotlin {
-	compilerOptions {
-		jvmTarget = JvmTarget.JVM_25
-	}
-}
+    kotlin {
+        compilerOptions {
+            jvmTarget = JvmTarget.JVM_25
+        }
+    }
 
-java {
-	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-	// if it is present.
-	// If you remove this line, sources will not be generated.
-	withSourcesJar()
+    tasks.withType(JavaCompile).configureEach {
+        it.options.release = rootProject.java_version as int
+        it.options.encoding = 'UTF-8'
+    }
 
-	sourceCompatibility = JavaVersion.VERSION_25
-	targetCompatibility = JavaVersion.VERSION_25
-}
+    tasks.withType(ProcessResources).configureEach {
+        inputs.properties(metadata)
+        ['fabric.mod.json', 'META-INF/neoforge.mods.toml'].each { pattern ->
+            filesMatching(pattern) {
+                expand(metadata)
+            }
+        }
+    }
 
-jar {
-	def projectName = project.name
-	inputs.property "projectName", projectName
-
-	from("LICENSE") {
-		rename { "${it}_$projectName"}
-	}
-}
-
-// configure the maven publication
-publishing {
-	publications {
-		create("mavenJava", MavenPublication) {
-			from components.java
-		}
-	}
-
-	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
-	repositories {
-		// Add repositories to publish to here.
-		// Notice: This block does NOT have the same function as the block in the top level.
-		// The repositories here will be used for publishing your artifact, not for
-		// retrieving dependencies.
-	}
+    tasks.named('jar', Jar) {
+        from(rootProject.file('LICENSE')) {
+            rename { "LICENSE_${rootProject.archives_name}" }
+        }
+    }
 }

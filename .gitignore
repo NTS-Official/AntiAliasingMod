@@ -11,7 +11,6 @@ classes/
 
 # idea
 
-.idea/
 *.iml
 *.ipr
 *.iws
@@ -28,9 +27,11 @@ bin/
 
 *.DS_Store
 
-# fabric
+# fabric / architectury
 
 run/
+.kotlin/
+.architectury-transformer/
 
 # java
 
@@ -38,3 +39,6 @@ hs_err_*.log
 replay_*.log
 *.hprof
 *.jfr
+
+# misc
+.workbuddy/

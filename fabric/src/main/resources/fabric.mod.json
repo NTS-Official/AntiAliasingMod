@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${mod_version}",
+  "name": "${mod_name}",
+  "description": "A Mod that aims at implementing antialiasing features to Minecraft.",
+  "authors": [
+    "${mod_author}"
+  ],
+  "contact": {
+    "homepage": "",
+    "sources": ""
+  },
+  "license": "${mod_license}",
+  "icon": "assets/aamod/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "${mod_group}.fabric.AAModFabric"
+    ],
+    "client": [
+      "${mod_group}.fabric.client.AAModFabricClient"
+    ]
+  },
+  "mixins": [
+    "aamod.mixins.json",
+    {
+      "config": "aamod.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${fabric_loader_version}",
+    "minecraft": "~${minecraft_version}",
+    "java": ">=${java_version}",
+    "fabric-api": "*",
+    "fabric-language-kotlin": "*",
+    "architectury": ">=${architectury_api_version}"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}

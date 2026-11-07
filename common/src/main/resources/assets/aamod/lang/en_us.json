@@ -1,0 +1,8 @@
+{
+  "options.antialiasing": "Anti-Aliasing",
+  "options.antialiasing.tooltip": "Controls the anti-aliasing mode.\n\nAvailable options: FXAA, SMAA, TAA",
+  "options.antialiasing.mode.0": "OFF",
+  "options.antialiasing.mode.1": "FXAA",
+  "options.antialiasing.mode.2": "SMAA",
+  "options.antialiasing.mode.3": "TAA"
+}

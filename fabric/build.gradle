@@ -1,0 +1,83 @@
+plugins {
+    id 'com.gradleup.shadow'
+}
+
+architectury {
+    platformSetupLoomIde()
+    fabric()
+}
+
+configurations {
+    // common 的编译 / 开发运行时产物（no-remap 下直接引用工程，无需 namedElements）
+    common {
+        canBeResolved = true
+        canBeConsumed = false
+    }
+    compileClasspath.extendsFrom common
+    runtimeClasspath.extendsFrom common
+    developmentFabric.extendsFrom common
+
+    // common 的生产转换产物，由 shadowJar 打进最终 jar
+    shadowCommon {
+        canBeResolved = true
+        canBeConsumed = false
+    }
+}
+
+dependencies {
+    implementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+    api "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_api_version}"
+
+    // Kotlin 标准库由 fabric-language-kotlin 在运行时提供
+    api "net.fabricmc:fabric-language-kotlin:${rootProject.fabric_kotlin_version}"
+    api "dev.architectury:architectury-fabric:${rootProject.architectury_api_version}"
+
+    // 可选的 Mod Menu 集成，仅开发时编译需要
+    compileOnly "com.terraformersmc:modmenu:${rootProject.modmenu_version}"
+
+    common(project(path: ':common')) { transitive false }
+    shadowCommon(project(path: ':common', configuration: 'transformProductionFabric')) { transitive false }
+}
+
+// no-remap 下没有 remapJar，shadowJar 就是正式产物；jar 只作为它的基底
+jar {
+    archiveClassifier = 'raw'
+}
+
+shadowJar {
+    dependsOn(jar)
+    exclude 'architectury.common.json'
+    // 用已被 Loom 处理过的 jar 作为基底，而不是重新收集 source set
+    mainSpec.sourcePaths.clear()
+    from(zipTree(jar.archiveFile))
+    configurations = [project.configurations.shadowCommon]
+    archiveClassifier = null
+}
+
+// 让源码 jar 也带上 common 的源码
+sourcesJar {
+    def commonSources = project(':common').sourcesJar
+    dependsOn commonSources
+    from commonSources.archiveFile.map { zipTree(it) }
+}
+
+// 发布时对外暴露 shadowJar 而不是 raw jar
+configurations {
+    apiElements {
+        outgoing.artifacts.clear()
+        outgoing.artifact(shadowJar)
+    }
+    runtimeElements {
+        outgoing.artifacts.clear()
+        outgoing.artifact(shadowJar)
+    }
+}
+
+publishing {
+    publications {
+        create('mavenFabric', MavenPublication) {
+            artifactId = base.archivesName.get()
+            from components.java
+        }
+    }
+}
