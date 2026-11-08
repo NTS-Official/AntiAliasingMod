@@ -154,6 +154,10 @@ PowerShell 可在当前终端执行 `$env:JAVA_HOME='你的 JDK 25 安装目录'
 ./gradlew :neoforge:runClient -Penable_iris=true
 ```
 
+也可直接运行 `./gradlew :fabric:runClientWithIris` 或 `./gradlew :neoforge:runClientWithIris`，无需额外传入属性。
+这两个任务继承普通客户端配置，仅向各自的运行类路径添加 Iris 和 Sodium；生成的 IntelliJ 配置通过 Gradle 任务启动。
+NeoForge 的该任务还设置 `neoforge.disableGlValidation=true`，关闭会触发 Iris 崩溃的开发绘制校验；普通 `runClient` 保留原有校验设置。
+
 `enable_iris=true` 会同时加入 Iris 必需的 Sodium；开关只影响开发运行时，不改变发布 jar 的打包依赖。
 
 Kotlin 标准库**没有**被打包进 jar：Fabric 侧由 `fabric-language-kotlin` 提供，

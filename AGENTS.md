@@ -114,6 +114,9 @@ NeoForge Iris 1.11.4 trips an upstream vertex-format array bug under development
 graphics validation, reproduced with aamod absent. Shader runtime checks use
 production conditions in the temporary validation mod; never disable the global
 IDE/validation flag in shipped AA code. See plan section 15 for evidence.
+The NeoForge `runClientWithIris` task uses the loader's
+`neoforge.disableGlValidation=true` property to disable OpenGL validation while
+keeping the IDE flag unchanged. Regular `runClient` does not set this property.
 
 Final artifacts are `fabric/build/libs/aamod-fabric-<version>.jar` and
 `neoforge/build/libs/aamod-neoforge-<version>.jar`. `shadowJar` produces these;

@@ -20,6 +20,11 @@ configurations {
         canBeResolved = true
         canBeConsumed = false
     }
+
+    irisRuntime {
+        canBeResolved = true
+        canBeConsumed = false
+    }
 }
 
 dependencies {
@@ -32,6 +37,9 @@ dependencies {
     compileOnly "com.terraformersmc:modmenu:${rootProject.modmenu_version}"
     localRuntime "com.terraformersmc:modmenu:${rootProject.modmenu_version}"
 
+    irisRuntime("net.caffeinemc:sodium-fabric:${rootProject.sodium_version}+mc${rootProject.minecraft_version}") { transitive false }
+    irisRuntime("maven.modrinth:iris:${rootProject.iris_version}+${rootProject.minecraft_version}-fabric") { transitive false }
+
     if (rootProject.enable_sodium.toBoolean() || rootProject.enable_iris.toBoolean()) {
         localRuntime("net.caffeinemc:sodium-fabric:${rootProject.sodium_version}+mc${rootProject.minecraft_version}") { transitive false }
     }
@@ -41,6 +49,21 @@ dependencies {
 
     common(project(path: ':common')) { transitive false }
     shadowCommon(project(path: ':common', configuration: 'transformProductionFabric')) { transitive false }
+}
+
+loom {
+    runs {
+        clientWithIris {
+            inherit client
+            displayName = 'Minecraft Client with Iris'
+            preferGradleTask = true
+        }
+    }
+}
+
+tasks.named('runClientWithIris') {
+    description = 'Starts the Minecraft client with Iris and Sodium'
+    classpath configurations.irisRuntime
 }
 
 jar {

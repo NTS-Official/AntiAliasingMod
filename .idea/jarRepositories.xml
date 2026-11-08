@@ -71,5 +71,15 @@
       <option name="name" value="KotlinForForge" />
       <option name="url" value="https://thedarkcolour.github.io/KotlinForForge/" />
     </remote-repository>
+    <remote-repository>
+      <option name="id" value="CaffeineMC" />
+      <option name="name" value="CaffeineMC" />
+      <option name="url" value="https://maven.caffeinemc.net/releases/" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="Modrinth" />
+      <option name="name" value="Modrinth" />
+      <option name="url" value="https://api.modrinth.com/maven/" />
+    </remote-repository>
   </component>
 </project>

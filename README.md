@@ -218,6 +218,13 @@ Development clients omit both mods by default. Versions and switches live in
 ./gradlew :neoforge:runClient -Penable_iris=true
 ```
 
+To launch with Iris and Sodium without specifying properties, use
+`./gradlew :fabric:runClientWithIris` or `./gradlew :neoforge:runClientWithIris`.
+These tasks inherit the regular client configuration and add both mods only to
+their own runtime classpath. Generated IntelliJ configurations invoke the Gradle task.
+The NeoForge task also sets `neoforge.disableGlValidation=true` to avoid the Iris
+development draw-validation crash. Regular `runClient` keeps its validation settings.
+
 `enable_iris=true` also adds Sodium, which Iris requires. These switches affect
 only the development runtime, not the dependencies bundled in published jars.
 
