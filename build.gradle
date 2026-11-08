@@ -76,6 +76,7 @@ subprojects {
     kotlin {
         compilerOptions {
             jvmTarget = JvmTarget.JVM_25
+            freeCompilerArgs.add('-Xjdk-release=25')
         }
     }
 

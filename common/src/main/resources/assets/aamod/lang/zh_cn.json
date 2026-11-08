@@ -1,8 +1,16 @@
 {
   "options.antialiasing": "抗锯齿",
-  "options.antialiasing.tooltip": "此选项控制抗锯齿相关设置。\n\n可用的选项：FXAA、SMAA、TAA",
+  "options.antialiasing.tooltip": "FXAA 在 HUD 绘制前平滑世界与手持物品，可能轻微软化细节。\n\nSMAA、TAA 尚未实现。Iris/Sodium 兼容将在第二阶段完成。",
   "options.antialiasing.mode.0": "关闭",
   "options.antialiasing.mode.1": "FXAA",
-  "options.antialiasing.mode.2": "SMAA",
-  "options.antialiasing.mode.3": "TAA"
+  "options.antialiasing.mode.2": "SMAA（尚未实现）",
+  "options.antialiasing.mode.3": "TAA（尚未实现）",
+  "options.antialiasing.status.off": "状态：已关闭",
+  "options.antialiasing.status.ready": "状态：就绪",
+  "options.antialiasing.status.active": "状态：运行中",
+  "options.antialiasing.status.no_world": "状态：等待进入世界",
+  "options.antialiasing.status.not_implemented": "状态：所选模式尚未实现",
+  "options.antialiasing.status.missing_input": "状态：缺少所需渲染输入",
+  "options.antialiasing.status.compatibility_paused": "状态：因兼容策略暂缓",
+  "options.antialiasing.status.failed": "状态：渲染失败，请查看日志；重载资源或切换模式后重试。"
 }

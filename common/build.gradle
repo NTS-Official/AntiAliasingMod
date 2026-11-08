@@ -1,15 +1,11 @@
 architectury {
-    // 由根 gradle.properties 的 enabled_platforms 决定要生成哪些平台的转换产物
     common rootProject.enabled_platforms.split(',')
 }
 
+sourceSets.main.java.srcDir 'src/main/kotlin'
+
 dependencies {
-    // 仅用于 @Environment 等注解；common 里禁止使用 Fabric Loader 的运行时 API。
     implementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
-
-    // Architectury 运行时 API 的 common 侧（统一事件、注册、网络等抽象）
     implementation "dev.architectury:architectury:${rootProject.architectury_api_version}"
-
-    // @ExpectPlatform 注解本身，纯编译期
     compileOnly "dev.architectury:architectury-injectables:${rootProject.architectury_injectables_version}"
 }

@@ -4,11 +4,30 @@
 
 ## Introduction
 
-A Minecraft mod that brings anti-aliasing (FXAA / SMAA / TAA) to the default
-Blaze3D rendering abstraction.
+A Minecraft mod that implements FXAA through the default Blaze3D rendering
+abstraction, with extension points for future SMAA and TAA implementations.
 
 This repository is an **Architectury-based multi-loader workspace**: one shared
 codebase builds a Fabric jar and a NeoForge jar.
+
+## Anti-aliasing status
+
+- **FXAA is implemented** on the vanilla rendering path, after vanilla entity
+  post effects and before HUD / GUI rendering. It filters world geometry and held
+  items without filtering GUI text, menus, or the crosshair.
+- **SMAA and TAA are placeholders** with explicit status text. Selecting them
+  does not run FXAA as a substitute.
+- **Iris / Sodium compatibility is phase two** and is not validated yet.
+
+Select FXAA in Options → Video Settings → Anti-Aliasing. It takes effect on the
+next world frame and persists in the vanilla `options.txt` as `antialiasing:1`.
+Missing or invalid values fall back to OFF. Existing graphics preset mappings
+remain Fast → OFF, Fancy → SMAA, Fabulous → TAA; choose FXAA manually to enable it.
+
+FXAA can soften fine details and does not provide temporal stabilization.
+The current client verification uses OpenGL; Vulkan has not been validated.
+See [the implementation plan and verification record](FXAA_IMPLEMENTATION_PLAN_ZH.md)
+for stage boundaries and follow-up work.
 
 ## Workspace layout
 
@@ -19,16 +38,15 @@ codebase builds a Fabric jar and a NeoForge jar.
 ├── gradle.properties         # ALL versions and mod metadata live here
 ├── common/                   # loader-agnostic code + shared resources
 │   └── src/main/
-│       ├── kotlin/           # AAMod, AAModClient, VideoAntiAliasingSettings
-│       ├── java/             # mixins + PlatformHelper (@ExpectPlatform)
+│       ├── kotlin/           # Kotlin code, Java mixins, AA renderer, PlatformHelper
 │       └── resources/        # mixin configs, assets/aamod/lang, icon
 ├── fabric/                   # Fabric entrypoints, fabric.mod.json
 │   └── src/main/
-│       ├── java/             # AAModFabric, AAModFabricClient, PlatformHelperImpl
+│       ├── kotlin/           # AAModFabric, AAModFabricClient, PlatformHelperImpl
 │       └── resources/
 └── neoforge/                 # NeoForge entrypoints, neoforge.mods.toml
     └── src/main/
-        ├── java/             # AAModNeoForge, AAModNeoForgeClient, PlatformHelperImpl
+        ├── kotlin/           # AAModNeoForge, AAModNeoForgeClient, PlatformHelperImpl
         └── resources/META-INF/
 ```
 
@@ -42,10 +60,11 @@ Rules of thumb:
   `common`: a plain project reference (compile/dev runtime) and
   `transformProductionFabric` / `transformProductionNeoForge` (packaged output).
 - Platform differences go through `@ExpectPlatform`: declare a static stub in
-  `common/.../PlatformHelper.java`, then implement
+  `common/.../PlatformHelper.kt`, then implement
   `com.nts.aamod.platform.fabric.PlatformHelperImpl` (Fabric) and
-  `com.nts.aamod.aamod.platform.neoforge.PlatformHelperImpl` (NeoForge) with matching
-  signatures. Architectury rewrites the stub bodies at build time to delegate
+  `com.nts.aamod.platform.neoforge.PlatformHelperImpl` (NeoForge) with matching
+  signatures. A static forwarding bridge preserves the existing NeoForge package.
+  Architectury rewrites the stub bodies at build time to delegate
   to the platform sub-package, while callers keep referencing the stub.
 
 ## Requirements
@@ -57,6 +76,13 @@ Rules of thumb:
 | Gradle | 9.7.1 (wrapper included) |
 | Architectury Loom | 1.17-SNAPSHOT, **`dev.architectury.loom-no-remap`** |
 | architectury-plugin | 3.5-SNAPSHOT |
+
+The local default JDK 27 remains unchanged. Running the wrapper with JDK 27
+reports its version successfully, but the actual build configuration fails in
+Groovy with `Unsupported class file major version 71`. Builds and client checks
+currently use a process-local JDK 25. Java release, Kotlin JVM target, and Kotlin
+JDK API release remain 25. In PowerShell, set `$env:JAVA_HOME` to your JDK 25
+installation before invoking the wrapper.
 
 > **Why `loom-no-remap`?** Since Minecraft 26.1 the game jar is no longer
 > obfuscated, so Mojang does not publish mappings for 26.2. The regular
@@ -98,9 +124,9 @@ Final jars land in `fabric/build/libs/` and `neoforge/build/libs/`, named
 | NeoForge | Kotlin for Forge, Architectury API |
 
 Kotlin stdlib is **not** bundled: `fabric-language-kotlin` provides it on Fabric
-and `forgeRuntimeLibrary("thedarkcolour:kotlinforforge-neoforge:...")` provides
-it in the NeoForge dev runtime. Entrypoints are plain Java classes, so no Kotlin
-language adapter is needed in the mod metadata.
+and `localRuntime("thedarkcolour:kotlinforforge-neoforge:...")` provides
+it in the NeoForge dev runtime. Entrypoints are written in Kotlin; Fabric uses
+its default constructor entrypoints and NeoForge uses JavaFML.
 
 If you do not need Architectury's unified events/registry/network API, you can
 drop the `dev.architectury:architectury*` dependencies and the `architectury`

@@ -1,0 +1,30 @@
+{
+  "targets": {
+    "aamod:fxaa_swap": {}
+  },
+  "passes": [
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "aamod:post/fxaa",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "minecraft:main",
+          "bilinear": true
+        }
+      ],
+      "output": "aamod:fxaa_swap"
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "aamod:post/copy",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "aamod:fxaa_swap"
+        }
+      ],
+      "output": "minecraft:main"
+    }
+  ]
+}

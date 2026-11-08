@@ -40,8 +40,6 @@ dependencies {
 
     api "dev.architectury:architectury-neoforge:${rootProject.architectury_api_version}"
 
-    // Kotlin 运行时由 Kotlin for Forge 提供：只作用于开发运行环境，不打包进成品；
-    // 玩家侧依赖写在 neoforge.mods.toml 里。
     localRuntime("thedarkcolour:kotlinforforge-neoforge:${rootProject.kotlin_for_forge_version}") {
         exclude group: 'net.neoforged.fancymodloader', module: 'loader'
     }

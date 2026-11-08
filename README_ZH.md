@@ -6,12 +6,21 @@
 
 作为 DXRMC 项目开发中的附属品，本模组把抗锯齿功能单独拿了出来并适配了 Minecraft 默认的 Blaze3D 渲染抽象层。
 
-于是我们便可以在 Minecraft 默认的 OpenGL 与 Vulkan 后端中使用一些抗锯齿功能。
+渲染实现使用 Blaze3D 抽象，不直接调用 OpenGL。目前实际客户端验证使用 OpenGL；Vulkan 尚未完成运行验证。
 
-#### 目前包含的抗锯齿功能：
-* FXAA：快速近似抗锯齿，直接对锯齿边做采样平均，对性能几乎没有影响。
-* SMAA：子像素增强抗锯齿，将边缘的单个像素细分为多个子像素再进行平均值采样，以达成模糊锯齿边缘的效果，会有较小的性能损失。
-* TAA：时序重建抗锯齿技术，利用历史帧导出的运动矢量计算模糊，达成极佳的抗锯齿效果，缺点是画面会变糊（如果你在基岩版用过 TAAU 的话，就会知道这一点）。
+#### 当前实现状态
+
+- **FXAA 已实现**：使用方向判定、边缘端点搜索和子像素处理，平滑世界与手持物品轮廓，可能轻微软化细节。
+- **SMAA、TAA 尚未实现**：保留设置编号并明确提示，不执行其它算法替代。
+- **Iris / Sodium 兼容属于第二阶段**，目前只验证未安装这两个模组的原版渲染路径。
+
+在「选项 → 视频设置 → 抗锯齿」选择 FXAA，下一有效世界帧生效；选择关闭即停用。设置通过原版 `options.txt` 的 `antialiasing` 键保存，缺失或非法值回到关闭。FXAA 在原版实体视角特效之后、HUD / GUI 之前执行，字体、准星与菜单不会被本模组过滤。
+
+已有画质预设映射保留：流畅 → 关闭、精美 → SMAA、极佳 → TAA。后两者目前仍是未实现状态，需要手动选择 FXAA 才会启用实际处理。
+
+第一阶段架构、接入点、生命周期和验证记录见 [FXAA 实现与抗锯齿扩展方案](FXAA_IMPLEMENTATION_PLAN_ZH.md)。
+
+TAA 的多种手动切换采样方案见 [时域采样方案](TEMPORAL_SAMPLING_PLAN_ZH.md)，包含 Halton、Hammersley、Owen-scrambled Sobol、Rank-1/R2 和渐进式泊松蓝噪声。该方案不依赖神经超分。
 
 ## 跨加载器工作区
 
@@ -24,8 +33,7 @@
 ├── gradle.properties         # 所有版本号与模组元数据集中在此
 ├── common/                   # 与加载器无关的代码与共享资源
 │   └── src/main/
-│       ├── kotlin/           # AAMod、AAModClient、VideoAntiAliasingSettings
-│       ├── java/             # mixin + PlatformHelper（@ExpectPlatform）
+│       ├── kotlin/           # Kotlin 代码、Java mixin、抗锯齿控制器和 PlatformHelper
 │       └── resources/        # mixin 配置、assets/aamod/lang、图标
 ├── fabric/                   # Fabric 入口、fabric.mod.json、PlatformHelperImpl
 └── neoforge/                 # NeoForge 入口、neoforge.mods.toml、PlatformHelperImpl
@@ -36,9 +44,9 @@
 - `common/` 里**不要**出现 `net.fabricmc.*`（注解除外）或 `net.neoforged.*` 的引用。凡是加载器相关的代码都放到 `fabric/` 或 `neoforge/`。
 - 共享资源（语言文件、图标、mixin 配置）放 `common/src/main/resources`，构建时由 `shadowCommon` 配置打进两个平台 jar。
 - 平台模块消费 common 的两种产物：普通工程引用（编译与开发运行时）和 `transformProductionFabric` / `transformProductionNeoForge`（打包产物）。
-- 平台差异走 `@ExpectPlatform`：在 `common/.../PlatformHelper.java` 声明静态桩方法，再分别在
+- 平台差异走 `@ExpectPlatform`：在 `common/.../PlatformHelper.kt` 声明静态桩方法，再分别在
   `fabric/` 里写 `com.nts.aamod.platform.fabric.PlatformHelperImpl`、在 `neoforge/` 里写
-  `com.nts.aamod.aamod.platform.neoforge.PlatformHelperImpl`，方法签名保持一致。
+  `com.nts.aamod.platform.neoforge.PlatformHelperImpl`，方法签名保持一致。NeoForge 的旧包由静态转发桥保留。
   Architectury 会在构建期把桩方法体改写成对「原包 + 平台名子包」实现类的转调，调用方始终只引用桩类。
 
 ## 环境要求
@@ -50,6 +58,10 @@
 | Gradle | 9.7.1（已带 wrapper） |
 | Architectury Loom | 1.17-SNAPSHOT，**`dev.architectury.loom-no-remap`** |
 | architectury-plugin | 3.5-SNAPSHOT |
+
+本机默认 JDK 27 保持不变。已验证用 JDK 27 启动 wrapper 的 `--version`，但实际配置构建时 Groovy 报 `Unsupported class file major version 71`。当前构建和客户端验证在命令进程中显式使用 JDK 25，Java `--release`、Kotlin JVM / JDK API 目标均保持 25。
+
+PowerShell 可在当前终端执行 `$env:JAVA_HOME='你的 JDK 25 安装目录'` 后运行以下命令，无须更改系统默认 Java。
 
 > **为什么是 `loom-no-remap`？** Minecraft 26.1 起游戏本体不再混淆，Mojang 也就不为 26.2
 > 发布官方映射了。普通的 `dev.architectury.loom` 仍强制要求 `mappings` 非空，会直接报
@@ -87,8 +99,8 @@
 | NeoForge | Kotlin for Forge、Architectury API |
 
 Kotlin 标准库**没有**被打包进 jar：Fabric 侧由 `fabric-language-kotlin` 提供，
-NeoForge 侧开发运行时由 `forgeRuntimeLibrary("thedarkcolour:kotlinforforge-neoforge:...")` 提供，
-玩家侧依赖写在 `neoforge.mods.toml` 里。入口类都是普通 Java 类，因此模组元数据里不再需要 Kotlin 语言适配器。
+NeoForge 侧开发运行时由 `localRuntime("thedarkcolour:kotlinforforge-neoforge:...")` 提供，
+玩家侧依赖写在 `neoforge.mods.toml` 里。入口类使用 Kotlin 编写，Fabric 保留默认构造入口，NeoForge 使用 JavaFML 加载入口。
 
 如果不需要 Architectury 的统一事件 / 注册 / 网络 API，可以删掉 `dev.architectury:architectury*` 依赖
 以及 `fabric.mod.json` / `neoforge.mods.toml` 中的 `architectury` 依赖项；

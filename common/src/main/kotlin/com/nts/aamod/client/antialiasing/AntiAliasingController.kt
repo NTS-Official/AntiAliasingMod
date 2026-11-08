@@ -1,0 +1,215 @@
+package com.nts.aamod.client.antialiasing
+
+import com.mojang.blaze3d.GpuFormat
+import com.mojang.blaze3d.framegraph.FrameGraphBuilder
+import com.mojang.blaze3d.pipeline.RenderTarget
+import com.mojang.blaze3d.systems.RenderSystem
+import com.nts.aamod.AAMod
+import com.nts.aamod.client.antialiasing.fxaa.FxaaMethod
+import com.nts.aamod.option.VideoAntiAliasingSettings
+import net.minecraft.client.Minecraft
+import net.minecraft.client.CameraType
+import net.minecraft.client.multiplayer.ClientLevel
+import net.minecraft.client.renderer.LevelTargetBundle
+import net.minecraft.client.renderer.state.level.CameraRenderState
+import net.minecraft.world.entity.Entity
+import org.joml.Matrix4f
+import java.util.EnumSet
+
+object AntiAliasingController {
+    private val methods: Map<Int, AntiAliasingMethod> = mapOf(VideoAntiAliasingSettings.FXAA to FxaaMethod())
+    private var provider: RenderEnvironmentProvider = VanillaRenderEnvironment
+    private var frameProvider: RenderEnvironmentProvider = provider
+    private var providerIdentity: Any = provider.identity
+    private var frameSupport = RenderSupport(true)
+    private var frame: FrameContext? = null
+    private var frameId = 0L
+    private var previousLevel: ClientLevel? = null
+    private var previousCamera: Entity? = null
+    private var previousCameraType = CameraType.FIRST_PERSON
+    private var previousMode = VideoAntiAliasingSettings.OFF
+    private var previousWidth = 0
+    private var previousHeight = 0
+    private val previousTargets = mutableMapOf<RenderStage, TargetState>()
+    private var renderedWorld = false
+    private var failedMode: Int? = null
+    private val completedStages = EnumSet.noneOf(RenderStage::class.java)
+
+    @Volatile
+    private var status = AntiAliasingStatus(VideoAntiAliasingSettings.OFF, RunState.OFF)
+
+    @JvmStatic
+    fun getStatus(): AntiAliasingStatus = status
+
+    fun setEnvironmentProvider(replacement: RenderEnvironmentProvider) {
+        RenderSystem.assertOnRenderThread()
+        provider = replacement
+    }
+
+    @JvmStatic
+    fun prepareFrame(advanceGameTime: Boolean) {
+        val minecraft = Minecraft.getInstance()
+        val mode = VideoAntiAliasingSettings.getCurrentAAMode()
+        val cameraType = minecraft.options.cameraType
+        if (minecraft.level !== previousLevel) invalidate(InvalidationReason.WORLD_CHANGED)
+        if (minecraft.cameraEntity !== previousCamera || cameraType != previousCameraType) {
+            invalidate(InvalidationReason.CAMERA_CHANGED)
+        }
+        if (mode != previousMode) invalidate(InvalidationReason.MODE_CHANGED)
+        previousLevel = minecraft.level
+        previousCamera = minecraft.cameraEntity
+        previousCameraType = cameraType
+        previousMode = mode
+        val identity = provider.identity
+        if (providerIdentity != identity) invalidate(InvalidationReason.PIPELINE_CHANGED)
+        providerIdentity = identity
+        frameProvider = provider
+        renderedWorld = false
+        completedStages.clear()
+        val context = FrameContext(
+            ++frameId,
+            mode,
+            minecraft.window.width,
+            minecraft.window.height,
+            minecraft.isGameLoadFinished && advanceGameTime && minecraft.level != null,
+            minecraft.level?.dimension()?.identifier(),
+            cameraType
+        )
+        if (context.width != previousWidth || context.height != previousHeight) {
+            invalidate(InvalidationReason.SIZE_CHANGED)
+        }
+        previousWidth = context.width
+        previousHeight = context.height
+        frame = context
+        status = when {
+            mode == VideoAntiAliasingSettings.OFF -> AntiAliasingStatus(mode, RunState.OFF)
+            !methods.containsKey(mode) -> AntiAliasingStatus(mode, RunState.NOT_IMPLEMENTED)
+            failedMode == mode -> AntiAliasingStatus(mode, RunState.FAILED, status.reason)
+            !context.hasWorld -> AntiAliasingStatus(mode, RunState.NO_WORLD)
+            else -> AntiAliasingStatus(mode, RunState.READY)
+        }
+        frameSupport = RenderSupport(true)
+        methods[mode]?.let { method -> guarded(method) { frameSupport = frameProvider.support(mode) } }
+        val method = currentMethod() ?: return
+        if (RenderStage.FRAME_PREPARE in method.requirements) {
+            guarded(method) {
+                if (canPrepare(method, context)) method.prepareFrame(context)
+            }
+        }
+    }
+
+    @JvmStatic
+    fun cameraExtracted(cameraState: CameraRenderState) {
+        var context = frame ?: return
+        context = context.copy(camera = CameraSnapshot(cameraState.projectionMatrix, cameraState.viewRotationMatrix, cameraState.pos))
+        val method = currentMethod()
+        if (method != null && RenderStage.FRAME_PREPARE in method.requirements) {
+            guarded(method) {
+                if (canPrepare(method, context)) method.prepareProjection(context, cameraState.projectionMatrix)
+            }
+        }
+        context = context.copy(camera = CameraSnapshot(cameraState.projectionMatrix, cameraState.viewRotationMatrix, cameraState.pos))
+        frame = context
+        completedStages.add(RenderStage.FRAME_PREPARE)
+    }
+
+    @JvmStatic
+    fun worldProjection(projection: Matrix4f): Matrix4f {
+        val context = frame ?: return projection
+        val camera = context.camera ?: return projection
+        frame = context.copy(camera = CameraSnapshot(projection, camera.view(Matrix4f()), camera.position))
+        return projection
+    }
+
+    @JvmStatic
+    fun addWorldResolve(frameGraph: FrameGraphBuilder, targets: LevelTargetBundle) {
+        val method = currentMethod() ?: return
+        if (RenderStage.WORLD_RESOLVE !in method.requirements) return
+        val pass = frameGraph.addPass("aamod_world_resolve")
+        val target = pass.readsAndWrites(targets.main)
+        targets.main = target
+        pass.executes { dispatch(RenderStage.WORLD_RESOLVE, target.get()) }
+    }
+
+    @JvmStatic
+    fun worldRendered() {
+        renderedWorld = frame?.hasWorld == true
+    }
+
+    @JvmStatic
+    fun finalColor(target: RenderTarget) {
+        if (renderedWorld) dispatch(RenderStage.FINAL_COLOR, target)
+    }
+
+    @JvmStatic
+    fun invalidate(reason: InvalidationReason) {
+        RenderSystem.assertOnRenderThread()
+        methods.values.forEach { it.invalidate(reason) }
+        if (reason == InvalidationReason.RESOURCES_RELOADED || reason == InvalidationReason.MODE_CHANGED) {
+            failedMode = null
+        }
+    }
+
+    @JvmStatic
+    fun close() {
+        invalidate(InvalidationReason.SHUTDOWN)
+        frame = null
+        previousLevel = null
+        previousCamera = null
+        renderedWorld = false
+    }
+
+    private fun currentMethod(): AntiAliasingMethod? {
+        val context = frame ?: return null
+        if (!context.hasWorld || failedMode == context.requestedMode) return null
+        val method = methods[context.requestedMode] ?: return null
+        val support = frameSupport
+        if (!support.supported) {
+            status = AntiAliasingStatus(method.mode, RunState.COMPATIBILITY_PAUSED, support.reason)
+            return null
+        }
+        return method
+    }
+
+    private fun canPrepare(method: AntiAliasingMethod, context: FrameContext): Boolean {
+        val requirements = method.requirements[RenderStage.FRAME_PREPARE] ?: return false
+        if (frameProvider.preparationInputs(context).containsAll(requirements)) return true
+        status = AntiAliasingStatus(method.mode, RunState.MISSING_INPUT, RenderStage.FRAME_PREPARE.name)
+        return false
+    }
+
+    private fun dispatch(stage: RenderStage, target: RenderTarget) {
+        val context = frame ?: return
+        val method = currentMethod() ?: return
+        val requirements = method.requirements[stage] ?: return
+        if (!completedStages.add(stage)) return
+        guarded(method) {
+            val environment = frameProvider.capture(stage, target, context)
+            if (!environment.inputs.containsAll(requirements) || environment.width <= 0 || environment.height <= 0) {
+                status = AntiAliasingStatus(method.mode, RunState.MISSING_INPUT, stage.name)
+                return@guarded
+            }
+            val targetState = TargetState(environment.width, environment.height, environment.format)
+            val previousTarget = previousTargets.put(stage, targetState)
+            if (previousTarget != null && (environment.width != previousTarget.width || environment.height != previousTarget.height)) {
+                invalidate(InvalidationReason.SIZE_CHANGED)
+            }
+            if (previousTarget != null && environment.format != previousTarget.format) invalidate(InvalidationReason.FORMAT_CHANGED)
+            method.render(context, environment)
+            status = AntiAliasingStatus(method.mode, RunState.ACTIVE)
+        }
+    }
+
+    private inline fun guarded(method: AntiAliasingMethod, action: () -> Unit) {
+        try {
+            action()
+        } catch (exception: Exception) {
+            failedMode = method.mode
+            status = AntiAliasingStatus(method.mode, RunState.FAILED, exception.message)
+            runCatching { method.close() }.onFailure { exception.addSuppressed(it) }
+            AAMod.LOGGER.error("Anti-aliasing mode {} failed; disabled until resource reload or mode change", method.mode, exception)
+        }
+    }
+
+    private data class TargetState(val width: Int, val height: Int, val format: GpuFormat?)
+}

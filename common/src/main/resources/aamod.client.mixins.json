@@ -3,9 +3,15 @@
   "package": "com.nts.aamod.client.mixin",
   "compatibilityLevel": "JAVA_25",
   "minVersion": "0.8",
-  "mixins": [
+  "client": [
     "option.OptionsAccessor",
-    "option.VideoSettingScreenMixin"
+    "option.VideoSettingScreenMixin",
+    "option.OptionFieldAccess",
+    "option.OptionsMixin",
+    "render.GameRendererMixin",
+    "render.LevelRendererMixin",
+    "render.PostChainMixin",
+    "render.ShaderManagerMixin"
   ],
   "injectors": {
     "defaultRequire": 1
