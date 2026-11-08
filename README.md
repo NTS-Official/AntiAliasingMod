@@ -27,10 +27,11 @@ The roadmap has four phases:
 | --- | --- | --- |
 | One | Vanilla FXAA and shared extension points | Implemented; see the verification record for coverage |
 | Two | Vanilla SSAA and SMAA 1x | Implemented; verification details and limits are recorded in the plan |
-| Three | Iris / Sodium integration | Planned; compatibility is verified per algorithm |
+| Three | Iris / Sodium integration | Implemented for the versions and support boundaries below |
 | Four | TAA | Planned: jitter, history reprojection, and multiple sampling sequences |
 
-Current rendering verification covers the vanilla path without Iris / Sodium.
+Rendering verification covers vanilla, Sodium, and Iris 1.11.4 with the support
+boundaries below. TAA remains phase four.
 
 Select a mode in Options → Video Settings → Anti-Aliasing. It takes effect on the
 next world frame and persists in the vanilla `options.txt` as `antialiasing`:
@@ -42,7 +43,12 @@ remain Fast → OFF, Fancy → SMAA, Fabulous → TAA.
 
 On Fabric, install **Mod Menu** and open Mods → Anti Aliasing Mod → Configure.
 On NeoForge, use the built-in mod list's configuration button. Both open the
-same screen with an AA mode selector and live FXAA controls:
+same screen with an AA mode selector and live FXAA controls.
+
+With Sodium installed, open Options → Video Settings → Anti Aliasing Mod →
+Anti-Aliasing. This opens the same configuration screen and returns to Sodium
+when closed. This entry also works alongside Iris and does not require Mod Menu.
+Available FXAA controls:
 
 | Parameter | Range | Default |
 | --- | --- | --- |
@@ -73,6 +79,33 @@ change mode to retry. SMAA upstream provenance and license are bundled under
 The current client verification uses OpenGL; Vulkan has not been validated.
 See [the implementation plan and verification record](AA_IMPLEMENTATION_PLAN_ZH.md)
 for stage boundaries and follow-up work.
+
+### Iris shader compatibility
+
+The shared configuration screen includes **Shader Pack Anti-Aliasing**:
+
+- **Automatic** is the default. While an Iris shader pack is in use, this mod
+  pauses its AA and keeps your requested mode. Shader pack settings are unchanged.
+- **Apply after shaders** enables FXAA or SMAA after Iris final color conversion
+  and vanilla world effects, before the HUD. It can duplicate the pack's own AA.
+- **SSAA with active shaders is unsupported** and pauses with a reason. Without
+  active shaders, FXAA, SMAA and SSAA work normally, including when Iris is installed.
+
+The adapter supports **Iris 1.11.4**, sRGB output and an RGBA8 main target. Other
+Iris versions, other output color spaces, missing final output, and API failures
+pause this mod's processing with an explicit status. Shadow passes are excluded.
+Shader pack changes and pipeline rebuilds invalidate this mod's resources;
+pipeline preparation also pauses processing to protect first-frame resolution.
+The policy persists as `aamod_iris_policy` (0 = Automatic, 1 = Apply after shaders).
+Missing or invalid values restore Automatic. The status updates in the config
+screen; the AA mode tooltip includes the current pause reason.
+
+Runtime checks use Complementary Reimagined r5.9.3 on both loaders. NeoForge's
+development-only graphics validation exposes an Iris vertex-format array bug
+that also reproduces without this mod. NeoForge shader checks therefore use
+production conditions (`SharedConstants.IS_RUNNING_IN_IDE=false`) in a temporary
+validation mod; the AA mod does not change that flag. See the verification record
+for evidence and the separate development-client shutdown limitation.
 
 ## Workspace layout
 
@@ -167,6 +200,26 @@ Final jars land in `fabric/build/libs/` and `neoforge/build/libs/`, named
 | --- | --- |
 | Fabric | Fabric API, fabric-language-kotlin, Architectury API |
 | NeoForge | Kotlin for Forge, Architectury API |
+
+**Sodium and Iris are optional.** The integration targets Sodium 0.9.2 and
+Iris 1.11.4 for Minecraft 26.2 on both loaders. Install their loader-specific
+jars separately; neither mod nor the Sodium API is bundled in the AA mod jar.
+The video settings integration uses Sodium's public Config API. Rendering support
+is described in the Iris compatibility section; it does not include every shader
+pack, graphics backend or future Iris version.
+
+Development clients omit both mods by default. Versions and switches live in
+`gradle.properties`; enable them per invocation (use `gradlew.bat` on Windows):
+
+```bash
+./gradlew :fabric:runClient -Penable_sodium=true
+./gradlew :fabric:runClient -Penable_iris=true
+./gradlew :neoforge:runClient -Penable_sodium=true
+./gradlew :neoforge:runClient -Penable_iris=true
+```
+
+`enable_iris=true` also adds Sodium, which Iris requires. These switches affect
+only the development runtime, not the dependencies bundled in published jars.
 
 Kotlin stdlib is **not** bundled: `fabric-language-kotlin` provides it on Fabric
 and `localRuntime("thedarkcolour:kotlinforforge-neoforge:...")` provides

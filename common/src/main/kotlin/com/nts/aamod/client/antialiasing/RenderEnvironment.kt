@@ -15,7 +15,8 @@ data class RenderEnvironment(
     val stage: RenderStage,
     val target: RenderTarget,
     val colorEncoding: ColorEncoding,
-    val inputs: Set<RenderInput>
+    val inputs: Set<RenderInput>,
+    val unavailableReason: String? = null
 ) {
     val width: Int = target.width
     val height: Int = target.height

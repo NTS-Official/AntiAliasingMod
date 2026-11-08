@@ -4,6 +4,7 @@
   "compatibilityLevel": "JAVA_25",
   "minVersion": "0.8",
   "client": [
+    "compat.IrisPipelineMixin",
     "option.OptionsAccessor",
     "option.VideoSettingScreenMixin",
     "option.OptionFieldAccess",

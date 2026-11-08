@@ -9,6 +9,7 @@ import com.nts.aamod.client.antialiasing.fxaa.FxaaMethod
 import com.nts.aamod.client.antialiasing.ssaa.SsaaMethod
 import com.nts.aamod.client.antialiasing.smaa.SmaaMethod
 import com.nts.aamod.client.option.VideoAntiAliasingSettings
+import com.nts.aamod.client.compat.iris.IrisCompatibility
 import net.minecraft.client.Minecraft
 import net.minecraft.client.CameraType
 import net.minecraft.client.multiplayer.ClientLevel
@@ -24,9 +25,9 @@ object AntiAliasingController {
         VideoAntiAliasingSettings.SSAA to SsaaMethod(),
         VideoAntiAliasingSettings.SMAA to SmaaMethod()
     )
-    private var provider: RenderEnvironmentProvider = VanillaRenderEnvironment
-    private var frameProvider: RenderEnvironmentProvider = provider
-    private var providerIdentity: Any = provider.identity
+    private var provider: RenderEnvironmentProvider? = null
+    private var frameProvider: RenderEnvironmentProvider = VanillaRenderEnvironment
+    private var providerIdentity: Any = VanillaRenderEnvironment.identity
     private var frameSupport = RenderSupport(true)
     private var frame: FrameContext? = null
     private var frameId = 0L
@@ -82,10 +83,12 @@ object AntiAliasingController {
         previousCamera = minecraft.cameraEntity
         previousCameraType = cameraType
         previousMode = mode
-        val identity = provider.identity
+        val compatibleProvider = IrisCompatibility.beginFrame()
+        val nextProvider = provider ?: compatibleProvider
+        val identity = nextProvider.identity
         if (providerIdentity != identity) invalidate(InvalidationReason.PIPELINE_CHANGED)
         providerIdentity = identity
-        frameProvider = provider
+        frameProvider = nextProvider
         renderedWorld = false
         framePrepared = false
         completedStages.clear()
@@ -176,7 +179,7 @@ object AntiAliasingController {
         RenderSystem.assertOnRenderThread()
         methods.values.forEach { it.invalidate(reason) }
         previousTargets.clear()
-        if (reason == InvalidationReason.RESOURCES_RELOADED || reason == InvalidationReason.MODE_CHANGED) {
+        if (reason == InvalidationReason.RESOURCES_RELOADED || reason == InvalidationReason.MODE_CHANGED || reason == InvalidationReason.PIPELINE_CHANGED) {
             failedMode = null
         }
     }
@@ -217,6 +220,10 @@ object AntiAliasingController {
         if (!completedStages.add(stage)) return
         guarded(method) {
             val environment = frameProvider.capture(stage, target, context)
+            if (environment.unavailableReason != null) {
+                status = AntiAliasingStatus(method.mode, RunState.COMPATIBILITY_PAUSED, environment.unavailableReason)
+                return@guarded
+            }
             if (!environment.inputs.containsAll(requirements) || environment.width <= 0 || environment.height <= 0) {
                 status = AntiAliasingStatus(method.mode, RunState.MISSING_INPUT, stage.name)
                 return@guarded

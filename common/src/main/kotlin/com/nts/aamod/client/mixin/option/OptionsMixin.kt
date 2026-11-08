@@ -1,6 +1,7 @@
 package com.nts.aamod.client.mixin.option
 
 import com.nts.aamod.client.option.FxaaSettings
+import com.nts.aamod.client.option.IrisSettings
 import com.nts.aamod.client.option.SpatialSettings
 import com.nts.aamod.client.option.VideoAntiAliasingSettings
 import com.nts.aamod.client.option.VideoAntiAliasingSettings.applyFromPreset
@@ -22,6 +23,7 @@ abstract class OptionsMixin {
         beginLoading()
         FxaaSettings.resetDefaults()
         SpatialSettings.resetDefaults()
+        IrisSettings.resetDefaults()
     }
 
     @Inject(method = ["load"], at = [At("RETURN")])
@@ -38,6 +40,7 @@ abstract class OptionsMixin {
         setLoadedMode(loadedMode)
         FxaaSettings.processOptions(access)
         SpatialSettings.processOptions(access)
+        IrisSettings.processOptions(access)
     }
 
     @Inject(method = ["applyGraphicsPreset"], at = [At("TAIL")])

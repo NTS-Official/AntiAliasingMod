@@ -4,7 +4,7 @@
 
 本文档整理设计、前两阶段实现和实际验证记录。第一阶段原始设计保留为历史基线；具体落地和测试覆盖见第 12、13 节。
 
-当前状态：第一阶段原版 FXAA、第二阶段原版 SSAA / SMAA 1x 与参数配置已实现；三个渲染阶段、分辨率管理和兼容提供者继续作为扩展边界。第三阶段 Iris / Sodium 与第四阶段 TAA 尚未实现。实际验证范围和环境限制按第 12、13 节分别报告。
+当前状态：第一阶段原版 FXAA、第二阶段原版 SSAA / SMAA 1x 与参数配置已实现；第三阶段已完成指定版本与支持边界内的 Iris / Sodium 适配，光影开启时支持手动叠加 FXAA / SMAA，SSAA 明确暂停；第四阶段 TAA 待实现。三个渲染阶段、分辨率管理和兼容提供者继续作为扩展边界。实际验证范围和环境限制按第 12、13、14、15 节分别报告。
 
 | 阶段 | 目标 | 交付边界 |
 | --- | --- | --- |
@@ -375,7 +375,7 @@ FXAA / SMAA 叠加路径的目标顺序是：光影世界和最终合成 → Iri
 
 Sodium 可能替换原版视频设置界面，因此不能把原版 `VideoSettingsScreen` 注入当作唯一设置入口。
 
-FXAA 参数配置已提前接入共享模组配置页面，Fabric 使用 Mod Menu，NeoForge 使用内置配置入口。第二阶段随算法加入 SSAA 倍率和 SMAA 质量，第三阶段再增加 Iris 策略及兼容状态。对 Sodium 选项页的进一步集成单独隔离，具体方式根据其目标版本公开能力确认。
+FXAA 参数配置已提前接入共享模组配置页面，Fabric 使用 Mod Menu，NeoForge 使用内置配置入口。第二阶段随算法加入 SSAA 倍率和 SMAA 质量，第三阶段再增加 Iris 策略及兼容状态。Sodium 0.9.2 已通过公开 Config API 注册外部页面，在其视频设置的本模组分组中提供抗锯齿入口，复用共享配置页并返回原 Sodium 页面；具体接入与验收记录见第 14 节。
 
 第三阶段开始时核实所选 Iris / Sodium 版本在两个加载器上的依赖和 UI 变化，不将不同加载器的支持情况混为一谈。
 
@@ -607,3 +607,123 @@ Fabric 固定机位每档记录 240 帧：OFF 平均 8.643 ms；SSAA 1.5× / 2×
 - 两个独立运行目录的 `screenshots/` 保存世界、菜单、特效及合成图中间输出；测试程序不打包。
 - 第 12.4 节记录的开发环境 shutdown watchdog 仍存在。行为断言与构建结果分别记录，不将出现 watchdog 的 `runClient` 整体报告为正常退出；NeoForge 测试进程可能残留，需按明确的本项目验证命令行清理。
 - Vulkan、其它设备 / 驱动、GPU 独立计时、实际显存耗尽、长期压力，以及聊天 / 背包 / 受伤画面的扩大人工检查仍未覆盖。第三阶段重新确认 Iris / Sodium 的输入、顺序与各算法支持；第四阶段实现 TAA。
+
+## 14. 第三阶段部分落地：可选依赖与视频设置入口
+
+### 14.1 本次范围与版本
+
+本节记录前次接入 Minecraft 26.2 的 Sodium 0.9.2 与 Iris 1.11.4，覆盖 Fabric 与 NeoForge。当时只完成可选依赖声明、开发运行开关及视频设置入口；后续完成的渲染适配与支持边界见第 15 节。
+
+版本集中在 `gradle.properties`：`sodium_version=0.9.2`、`iris_version=1.11.4`。开发开关 `enable_sodium` 与 `enable_iris` 默认均为 `false`；按次指定 `-Penable_sodium=true` 加入 Sodium，指定 `-Penable_iris=true` 同时加入 Iris 和其必需的 Sodium，两端行为一致。未启用时保留原版开发运行环境。
+
+- Sodium API：`net.caffeinemc:sodium-fabric-api:0.9.2+mc26.2`，仅编译期引用其与加载器无关的公开配置接口。
+- Sodium 运行时：`net.caffeinemc:sodium-fabric:0.9.2+mc26.2` / `sodium-neoforge:0.9.2+mc26.2`，来自 CaffeineMC 官方 Maven。
+- Iris 运行时：`maven.modrinth:iris:1.11.4+26.2-fabric` / `1.11.4+26.2-neoforge`，来自 Modrinth Maven。Maven 版本与下载文件名的 `+mc26.2` 写法不同。
+- 根工程用限定模块范围的独占 Maven 仓库，避免这些坐标先访问不相关仓库。可选模组使用 `localRuntime`，不进入发布 jar。
+- Fabric 用 `suggests` 声明可选模组；NeoForge 用客户端侧 `type="optional"` 依赖及 `AFTER` 排序。未安装二者时不强制加载对应入口类。
+
+### 14.2 视频设置适配
+
+新增 `client/compat/sodium/SodiumConfigEntryPoint.kt`，实现 Sodium 公开 `ConfigEntryPoint`。通过双端元数据的 `sodium:config_api_user` 注册，在 `registerConfigLate` 中给本模组分组添加外部页面：
+
+「选项 → 视频设置 → Anti Aliasing Mod → 抗锯齿」→ 现有 `AntiAliasingConfigScreen(parent)`。
+
+共享页面继续提供模式、FXAA 四项参数、SSAA 倍率和 SMAA 质量；关闭时保存原版选项并返回传入的 Sodium 视频设置页面。不复制参数状态，不注入 Sodium 内部 GUI，不修改 Iris 的光影入口。未安装 Sodium 时保留原版 `qualityOptions` 中的抗锯齿选项；Fabric Mod Menu 与 NeoForge 内置配置入口继续可用，Sodium 入口本身无需 Mod Menu。
+
+API 依据为 Sodium `mc26.2-0.9.2`，提交 `6c26e7b7eded82ce5a1d27f9b147ce5d8de99b7a` 的 [Config API 用法](https://github.com/CaffeineMC/sodium/blob/6c26e7b7eded82ce5a1d27f9b147ce5d8de99b7a/common/src/api/java/net/caffeinemc/mods/sodium/api/config/USAGE.md)。生产代码只使用公开 API；临时验证程序通过反射检查页面注册与调用结果，不随发布模组打包。
+
+### 14.3 客户端验收
+
+验证日期：2026-11-08。Minecraft 26.2，Fabric Loader 0.19.5 / Fabric API 0.161.0+26.2，NeoForge 26.2.0.82，Windows OpenGL。仍使用进程级 JDK 25，系统默认 JDK 27 未修改。Iris 测试未启用光影包。
+
+| 安装组合 | Fabric | NeoForge |
+| --- | --- | --- |
+| 无 Sodium / Iris | 原版抗锯齿选项存在；Mod Menu 配置入口、保存与返回通过 | 原版抗锯齿选项存在；内置配置入口、保存与返回通过 |
+| 仅 Sodium | 真实鼠标点击外部页面、共享设置、保存返回、反复打开无重复通过 | 页面注册与回调、共享设置、保存返回、再次打开无重复通过 |
+| Sodium + Iris | 上述检查通过；Iris Shader Packs 页面保留 | 上述检查通过；Iris Shader Packs 页面保留 |
+
+测试将模式设为 FXAA、子像素混合设为 0.321、搜索步数设为 3，关闭后重新加载 `options.txt` 并断言值保留。Sodium 外部页面在每次返回与再次打开后均恰好注册一次。960×640、GUI 倍率 2 的截图检查覆盖双端 Sodium 页面、Iris 同装页面、共享参数页及返回结果。
+
+证据保存在忽略的 `build/compat-ui-validation/`：
+
+- `fabric-vanilla.log`、`fabric-sodium.log`、`fabric-iris.log`：`FABRIC_OPTIONAL_UI_PASSED combination=vanilla|sodium|iris`。
+- `neo-vanilla.log`、`neo-sodium.log`、`neo-iris.log`：`NEOFORGE_OPTIONAL_UI_PASSED combination=vanilla|sodium|iris`。
+- `fabric/screenshots/` 与 `neoforge/screenshots/`：各组合的入口、配置与返回画面。
+- `build.log`、`final-build.log`：默认双端构建通过；`optional-dependencies.log`：双端可选运行依赖解析通过。最终发布 jar 的入口类与已展开元数据检查通过，未内置 Sodium / Iris 类或验证程序。
+
+本次仍出现第 12.4、13.6 节的开发环境退出问题：Fabric 功能断言后触发客户端关闭 watchdog，NeoForge 在模块关闭后出现 `ServerWatchdog` 类加载异常并可能残留进程。仅按本次验证专用参数和项目路径清理对应进程。功能断言通过与 `runClient` 正常退出分开报告。
+
+本次未进入测试世界，也未验证启用光影时的图像或算法效果；尚无新的世界渲染兼容结论。后续继续按第 9 节完成光影状态、策略、目标顺序与 FXAA / SSAA / SMAA 分别验收，第四阶段再实现 TAA。
+
+## 15. 第三阶段 Iris 渲染适配与验收
+
+### 15.1 接入与生命周期
+
+新增隔离的 `client/compat/iris/` 适配器，平台桥接只返回模组版本字符串。Iris 缺失时不加载带 Iris 类型的 `IrisApiAccess`，控制器及算法接口不引用 Iris 类型。仅启用已核实的 Iris 1.11.4 版本适配；其它版本在运行时显示暂停状态。NeoForge 的 Iris 可选依赖范围放宽至 `[0,)`，使不支持的已安装版本能到达运行时支持判定，而非阻止基础模组加载；Sodium 保留 0.9.2 最低依赖范围。
+
+光影使用与阴影状态通过 Iris 公开 API 查询。适配器中的版本特定查询只用于确认 sRGB 输出，以及区分“已加载且启用光影包、尚无实际世界管线”的准备状态；不读取 `colortex`、光影内部历史或光影包自身 AA 配置。查询异常或链接错误记录日志并暂停，之后成功查询可恢复，不改写请求模式。
+
+每帧固定环境、支持判定与策略；管线构建 / 销毁的可选 `@Pseudo` mixin 只递增管线修订号，下一帧使本模组资源失效。Iris `finalizeGameRendering` 返回时标记本帧有效主目标及颜色纹理；本模组在之后的既有 `GameRenderer.render` 最终颜色位置处理，验证帧号、管线修订及颜色纹理身份一致后再运行。该顺序依赖实际调用边界，不依赖 mixin 优先级。
+
+Iris 无最终输出、发生帧内管线变化、阴影视图或不支持的颜色输出时，拒绝把该输入交给算法。包已加载但管线未创建时暂停所有算法准备，尤其防止 SSAA 在光影首帧创建前交换主附件。光影启停、切包、资源重载及 resize 沿用控制器失效路径；管线变化也清除原管线的算法失败锁，允许新管线重试。
+
+源码核对使用 Iris 26.2 固定提交 `4ce5bb6ddd4b964b2b63442ebfca7e101ff128d0` 的 `MixinGameRenderer`、`IrisRenderingPipeline` 与 `FinalPassRenderer`，并与官方 1.11.4 发布 jar 的方法签名和字节码交叉核对。最终颜色写回主目标，颜色转换在 `renderLevel` 返回前完成，本模组随后运行并在 HUD 前结束。
+
+### 15.2 支持矩阵与设置
+
+| 环境 | FXAA | SMAA 1x | SSAA |
+| --- | --- | --- | --- |
+| 原版或仅 Sodium 0.9.2 | 支持 | 四档预设支持 | 四档倍率支持 |
+| Iris 1.11.4 安装，未使用光影 | 支持 | 四档预设可用 | 四档倍率支持 |
+| 光影实际使用中，自动策略 | 暂停 | 暂停 | 暂停 |
+| 光影实际使用中，光影后叠加 | 支持 sRGB / RGBA8 最终输出 | 支持 sRGB / RGBA8 最终输出 | 明确暂停：未适配光影分辨率控制 |
+| 非 sRGB、未知格式、输出未就绪或 API 失败 | 明确暂停 | 明确暂停 | 明确暂停 |
+| 不支持的 Iris 版本 | 显示版本暂停原因 | 显示版本暂停原因 | 显示版本暂停原因 |
+
+SSAA 的限制来自附件所有权与分辨率生命周期：现有原版路径交换主目标附件，但 Iris 维护自身目标、深度和 framebuffer 版本；本阶段不把原版交换方式直接套用于光影管线。不支持时保留 SSAA 请求，关闭光影后自动恢复。TAA 未实现，不因兼容适配而用其它算法替代。
+
+共享配置页新增「光影包抗锯齿策略」，默认自动，另可选光影后叠加。配置页的状态文字随策略变化更新，模式提示包含具体暂停原因。策略保存为 `aamod_iris_policy`，0 / 1 分别为自动 / 光影后叠加，缺失、非法文本或越界值恢复自动。光影自身 AA 不被本模组猜测或修改，用户可显式控制叠加。
+
+### 15.3 验证环境与方法
+
+验证日期 2026-11-08，Minecraft 26.2，Fabric Loader 0.19.5 / Fabric API 0.161.0+26.2，NeoForge 26.2.0.82，Sodium 0.9.2，Iris 1.11.4，Windows OpenGL，进程级 JDK 25；系统默认 JDK 27 未修改。
+
+真实光影包为 Modrinth 官方发布的 **Complementary Reimagined r5.9.3**，版本 ID `Bqen1mJX`，下载后核验官方 SHA512。测试世界包含黑白斜边、树叶、玻璃、栅栏与手持钻石剑。临时验证代码、世界、光影包和截图均位于忽略的 `build/iris-validation/`，不进入发布 jar。
+
+临时 mixin 在同一帧最终颜色处理前后分别下载 GPU 图像，检查实际像素差和 RGB 总和，避免把状态标记当作图像效果证据。自动策略要求像素完全不变，叠加要求非零过滤结果，并限制整体亮度偏移；另外保存含 HUD 的画面检查菜单、手持物品及透明内容。SMAA 四档分别运行，SSAA 无光影时核对世界附件尺寸 1200×900 / 1600×1200 / 2400×1800 / 3200×2400，输出保持 800×600。
+
+### 15.4 验收证据
+
+- `fabric-vanilla.log`、`fabric-sodium.log`、`neo-vanilla.log`、`neo-sodium.log`：无 Iris 的两种安装组合分别验证 FXAA / SMAA / SSAA、四档 SSAA 倍率及原生输出尺寸。
+- `fabric-sodium-effects.log`、`neo-sodium-effects.log`：仅 Sodium 时补测 FXAA / SMAA 同帧前后像素变化，覆盖没有 Iris 后处理的实际图像路径。
+- `fabric-complete.log`、`neo-complete.log`：完整光影矩阵；包括自动暂停、FXAA / SMAA 实际叠加、SSAA 明确暂停、四档 SMAA、光影自身 FXAA / TAA 开关、非 sRGB 拒绝、真实阴影回调、切包、资源重载、resize、光影启停与重新进世界。
+- `IRIS_COLOR_TAP` 记录每次处理前后改变的像素数和 RGB 总和。自动策略为 0 像素差；FXAA / SMAA 为非零过滤，整体 RGB 总和变化远小于 5% 验收上限。可检查各运行目录 `screenshots/` 中的 `*-before.png`、`*-after.png` 及 HUD / 配置页截图。
+- `IRIS_INVALID_OUTPUT_REJECTED`：通过临时故障注入，验证缺失本帧最终输出及帧内管线变化均被拒绝；`query_failed` 后恢复真实 API，再次返回 ACTIVE。预期 API 故障仅在临时验证程序中注入。
+- `IRIS_POLICY_PERSISTENCE_AND_DEFAULTS_PASSED`：保存重载及缺失 / 越界 / 非法文本回退；`IRIS_POLICY_UI_DYNAMIC_STATUS_PASSED`：通过实际策略按钮回调切换后，状态文字随之更新。
+- `IRIS_INITIAL_SHADER_PIPELINE_AND_REJOIN_PASSED`：加载光影包但销毁世界管线，确认先进入准备暂停状态，再以 SSAA 请求重新进世界；无错误世界附件分配，随后切回 FXAA 可运行。
+- `IRIS_OWNED_PIPELINE_COUNT` 与关闭状态资源检查：模式关闭后算法链与 SSAA 附件释放，反复重载和切换后本模组 GPU 管线数量保持有界。
+- `fabric-version.log`、`neo-version.log`：用官方 jar 的隔离副本只把版本元数据改为 1.11.3，模拟不支持版本；两端基础模组正常加载且返回 `aamod.compat.iris.version`。该测试不宣称真实 Iris 1.11.3 已兼容，原始依赖 jar 未修改。
+
+### 15.5 开发环境限制
+
+NeoForge 开发条件下，Iris 的顶点格式数组替换返回单元素数组，原版开发绘制校验按 16 个槽位读取，在手持物品渲染中触发 `ArrayIndexOutOfBoundsException`。`neo-upstream-baseline.log` 明确记录 `IRIS_BASELINE_AAMOD_LOADED=false`，移除本模组后仍复现同一调用栈。为验证实际生产路径，NeoForge 临时验证模组在图形初始化前设置 `SharedConstants.IS_RUNNING_IN_IDE=false`；发布代码不修改该标记，也没有把上游校验绕过作为模组功能。
+
+仍存在前述开发环境退出 watchdog 问题，功能断言与 `runClient` 正常退出分开记录；仅根据项目路径和专用验证参数清理残留进程。
+
+本阶段的支持结论限定于上述版本、OpenGL、sRGB / RGBA8 输出和实际测试条件，不推广到任意光影包、HDR、其它 Iris 版本或 Vulkan。光影开启时的 SSAA、第四阶段 TAA、任意光影内部时序数据协作均未宣称支持。
+
+### 15.6 最终交付检查
+
+`JDK 25 + ./gradlew.bat :fabric:build :neoforge:build --offline --console=plain` 最终通过，日志为 `build/iris-validation/final-build.log`。发布产物仍为 `fabric/build/libs/aamod-fabric-0.1.0-alpha.jar` 与 `neoforge/build/libs/aamod-neoforge-0.1.0-alpha.jar`。
+
+两个 jar 均包含 Iris 适配器、可选管线 hook、策略配置及 Sodium 配置入口，未内置 `net/irisshaders/`、`net/caffeinemc/` 或临时验证类。元数据无未展开占位符；发布字节码中的 `PlatformHelper.getModVersion` 分别转调 Fabric / NeoForge 平台实现。共享配置及 mixin JSON 检查通过，中英文 53 项翻译键一致，`git diff --check` 通过。
+
+| 第 9 节验收项 | 当前证据 |
+| --- | --- |
+| 可选 API 隔离、缺失 / 不支持版本、查询失败 | 双端无 Iris 运行、版本元数据隔离副本、真实 API 故障注入与恢复 |
+| 自动 / 叠加策略、最终输出边界、阴影跳过 | 双端真实光影、同帧 GPU 像素取样、真实阴影回调、无效输出与修订号检查 |
+| 设置入口、策略及状态 | 已有 Sodium / Mod Menu / NeoForge 入口验证，加上双端策略按钮、动态文字、持久化与非法值回退 |
+| 各算法与支持范围 | FXAA / SMAA 实际图像、四档 SMAA、无光影 SSAA 四档附件、光影 SSAA 暂停与关闭光影后恢复 |
+| 光影自身 AA、切包 / 重载 / resize、首帧及重进世界 | 双端完整矩阵与首次管线 / 重进世界标记，关闭后的资源释放与有界管线数量 |
+
+在上述已声明范围内完成第三阶段；保留第 15.5 节环境限制与未支持组合，后续第四阶段单独实现和验证 TAA。

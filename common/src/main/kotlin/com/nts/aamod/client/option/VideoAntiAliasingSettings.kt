@@ -27,6 +27,7 @@ object VideoAntiAliasingSettings {
                 Component.translatable("options.antialiasing.tooltip")
                     .append("\n\n")
                     .append(Component.translatable("options.antialiasing.status." + AntiAliasingController.getStatus().state.name.lowercase()))
+                    .also { tooltip -> AntiAliasingController.getStatus().reason?.let { tooltip.append("\n").append(Component.translatable(it)) } }
             )
         },
         { _, value -> Component.translatable(getModeKey(value)) },

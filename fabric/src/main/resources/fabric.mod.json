@@ -23,6 +23,9 @@
     ],
     "modmenu": [
       "${mod_group}.fabric.client.AAModModMenu"
+    ],
+    "sodium:config_api_user": [
+      "${mod_group}.client.compat.sodium.SodiumConfigEntryPoint"
     ]
   },
   "mixins": [
@@ -41,6 +44,8 @@
     "architectury": ">=${architectury_api_version}"
   },
   "suggests": {
-    "modmenu": "*"
+    "modmenu": "*",
+    "sodium": ">=${sodium_version}",
+    "iris": ">=${iris_version}"
   }
 }

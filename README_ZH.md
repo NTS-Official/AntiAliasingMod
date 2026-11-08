@@ -21,10 +21,10 @@
 | --- | --- | --- |
 | 第一阶段 | 原版 FXAA 与公共扩展预留 | 已实现，验证范围见方案文档 |
 | 第二阶段 | 原版 SSAA 与 SMAA 1x | 已实现，实际验证与限制见方案文档 |
-| 第三阶段 | Iris / Sodium 适配 | 待实现，按算法分别验证兼容性 |
+| 第三阶段 | Iris / Sodium 适配 | 已实现，支持版本与边界见下文 |
 | 第四阶段 | TAA | 待实现，包含 jitter、历史重投影及多种采样序列 |
 
-目前只验证未安装 Iris / Sodium 的原版渲染路径。
+已验证原版、Sodium 及下述支持范围内的 Iris 1.11.4 渲染路径；TAA 仍留在第四阶段。
 
 在「选项 → 视频设置 → 抗锯齿」选择模式，下一有效世界帧生效；选择关闭即停用。设置通过原版 `options.txt` 的 `antialiasing` 键保存：关闭 = 0、FXAA = 1、SMAA = 2、TAA = 3、SSAA = 4，缺失或非法值回到关闭。三种已实现算法均在原版实体视角特效之后、HUD / GUI 之前输出，字体、准星与菜单不会被本模组过滤。
 
@@ -32,7 +32,9 @@
 
 #### FXAA 参数配置
 
-Fabric 安装 **Mod Menu** 后，在「模组 → Anti Aliasing Mod → 配置」打开设置；NeoForge 使用内置模组列表的配置按钮。两端共用同一页面，可切换抗锯齿模式，并即时调整以下 FXAA 参数：
+Fabric 安装 **Mod Menu** 后，在「模组 → Anti Aliasing Mod → 配置」打开设置；NeoForge 使用内置模组列表的配置按钮。两端共用同一页面，可切换抗锯齿模式，并即时调整 FXAA 参数。
+
+安装 Sodium 后，也可从「选项 → 视频设置 → Anti Aliasing Mod → 抗锯齿」进入同一配置页，关闭后返回 Sodium 视频设置。与 Iris 同装时保留该入口，此入口不依赖 Mod Menu。FXAA 参数如下：
 
 | 参数 | 范围 | 默认值 | 作用 |
 | --- | --- | --- | --- |
@@ -48,6 +50,20 @@ Fabric 安装 **Mod Menu** 后，在「模组 → Anti Aliasing Mod → 配置�
 SSAA 像素与附件开销随倍率平方增长。请求尺寸超过设备限制或处理失败时保留用户设置，显示失败状态；切换模式或重载资源后重试。SMAA 上游来源、转换说明与许可随 jar 打包在 `assets/aamod/licenses/`。
 
 四阶段路线、架构、接入点、生命周期和前两阶段验证记录见 [抗锯齿四阶段实施与扩展方案](AA_IMPLEMENTATION_PLAN_ZH.md)。
+
+#### Iris 光影兼容
+
+共享配置页新增「光影包抗锯齿策略」：
+
+- **自动（默认）**：Iris 光影实际使用中时暂停本模组抗锯齿，保留用户请求模式；不修改光影包自身选项。
+- **光影后叠加**：允许 FXAA / SMAA 在 Iris 最终颜色转换与原版世界特效之后、HUD 之前处理；可能与光影自身抗锯齿重复平滑。
+- **光影开启时暂不支持 SSAA**：明确暂停并显示原因；未使用光影时，即使安装了 Iris，三种已实现算法仍可正常使用。
+
+适配器支持 **Iris 1.11.4、sRGB 输出及 RGBA8 主颜色目标**。其它 Iris 版本、其它输出颜色空间、最终输出未就绪及 API 查询失败时明确暂停；阴影通道不执行最终颜色处理。切包、管线重建时使本模组资源失效；管线准备期间也暂停处理，避免首帧误启动分辨率控制。
+
+策略保存为 `aamod_iris_policy`：0 = 自动，1 = 光影后叠加，缺失或非法值恢复自动。配置页实时更新兼容状态，模式选项提示中显示具体暂停原因。
+
+双端光影运行验证使用 Complementary Reimagined r5.9.3。NeoForge 开发环境的绘制校验会触发 Iris 顶点格式数组异常，移除本模组仍可复现；因此 NeoForge 光影验收在临时验证模组中按生产条件设置 `SharedConstants.IS_RUNNING_IN_IDE=false`。本模组不修改该全局标记，证据与独立的退出问题见方案文档。
 
 第四阶段 TAA 的多种手动切换采样方案见 [时域采样方案](TEMPORAL_SAMPLING_PLAN_ZH.md)，包含 Halton、Hammersley、Owen-scrambled Sobol、Rank-1/R2 和渐进式泊松蓝噪声。该方案不依赖神经超分。
 
@@ -126,6 +142,19 @@ PowerShell 可在当前终端执行 `$env:JAVA_HOME='你的 JDK 25 安装目录'
 | --- | --- |
 | Fabric | Fabric API、fabric-language-kotlin、Architectury API |
 | NeoForge | Kotlin for Forge、Architectury API |
+
+**Sodium 与 Iris 均为可选依赖。** 本次接入目标为 Minecraft 26.2 的 Sodium 0.9.2、Iris 1.11.4，两端分别使用对应加载器版本。玩家需另行安装，发布 jar 不内置这两个模组或 Sodium API。视频设置适配使用 Sodium 公开 Config API；渲染支持范围见上文 Iris 光影兼容说明，不表示任意光影包、图形后端或未来版本均兼容。
+
+开发客户端默认不加载二者，版本号与开关集中在 `gradle.properties`。可按次启用，Windows 使用 `gradlew.bat`：
+
+```bash
+./gradlew :fabric:runClient -Penable_sodium=true
+./gradlew :fabric:runClient -Penable_iris=true
+./gradlew :neoforge:runClient -Penable_sodium=true
+./gradlew :neoforge:runClient -Penable_iris=true
+```
+
+`enable_iris=true` 会同时加入 Iris 必需的 Sodium；开关只影响开发运行时，不改变发布 jar 的打包依赖。
 
 Kotlin 标准库**没有**被打包进 jar：Fabric 侧由 `fabric-language-kotlin` 提供，
 NeoForge 侧开发运行时由 `localRuntime("thedarkcolour:kotlinforforge-neoforge:...")` 提供，

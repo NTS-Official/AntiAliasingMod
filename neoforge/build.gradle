@@ -52,6 +52,13 @@ dependencies {
         exclude group: 'net.neoforged.fancymodloader', module: 'loader'
     }
 
+    if (rootProject.enable_sodium.toBoolean() || rootProject.enable_iris.toBoolean()) {
+        localRuntime("net.caffeinemc:sodium-neoforge:${rootProject.sodium_version}+mc${rootProject.minecraft_version}") { transitive false }
+    }
+    if (rootProject.enable_iris.toBoolean()) {
+        localRuntime("maven.modrinth:iris:${rootProject.iris_version}+${rootProject.minecraft_version}-neoforge") { transitive false }
+    }
+
     common(project(path: ':common')) { transitive false }
     shadowCommon(project(path: ':common', configuration: 'transformProductionNeoForge')) { transitive false }
 }

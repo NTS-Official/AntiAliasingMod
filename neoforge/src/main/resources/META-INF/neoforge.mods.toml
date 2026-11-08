@@ -9,7 +9,9 @@ displayName = "${mod_name}"
 authors = "${mod_author}"
 description = '''A Mod that aims at implementing antialiasing features to Minecraft.'''
 iconFile = "assets/aamod/icon.png"
-bannerFile = "assets/aamod/icon.png"
+
+[modproperties.${mod_id}]
+"sodium:config_api_user" = "${mod_group}.client.compat.sodium.SodiumConfigEntryPoint"
 
 [[dependencies.${mod_id}]]
 modId = "neoforge"
@@ -38,6 +40,20 @@ type = "required"
 versionRange = "[${kotlin_for_forge_version},)"
 ordering = "AFTER"
 side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "sodium"
+type = "optional"
+versionRange = "[${sodium_version},)"
+ordering = "AFTER"
+side = "CLIENT"
+
+[[dependencies.${mod_id}]]
+modId = "iris"
+type = "optional"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "CLIENT"
 
 [[mixins]]
 config = "aamod.mixins.json"

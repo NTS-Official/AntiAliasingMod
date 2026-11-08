@@ -16,6 +16,12 @@ import dev.architectury.injectables.annotations.ExpectPlatform
  * 新增方法时，记得同时在两个平台子工程的对应平台子包里提供签名一致的实现。
  */
 object PlatformHelper {
+    @JvmStatic
+    @ExpectPlatform
+    fun getModVersion(modId: String): String? {
+        throw AssertionError("Expected to be replaced by Architectury @ExpectPlatform")
+    }
+
     @get:JvmStatic
     @get:ExpectPlatform
     val platformName: String?

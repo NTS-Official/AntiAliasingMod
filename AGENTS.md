@@ -37,7 +37,10 @@ on Fabric and NeoForge. It uses Kotlin, including client mixins. The existing co
 OFF/FXAA/SMAA/TAA/SSAA video settings with persisted IDs 0/1/2/3/4. FXAA, SSAA and
 SMAA 1x run through shared render mixins and `client/antialiasing/`; TAA remains
 explicitly unimplemented. Iris/Sodium integration is phase three and TAA is phase
-four. `AAModClient` is a lifecycle
+four. Phase three includes optional dependencies, the Sodium video settings entry,
+and the isolated Iris 1.11.4 adapter. Automatic policy pauses AA with active
+shaders; explicit overlay supports FXAA/SMAA on sRGB RGBA8 output. SSAA pauses with
+active shaders. `AAModClient` is a lifecycle
 entry, not the render hook.
 
 - `common/src/main/kotlin/com/nts/aamod/`: shared initialization, client code,
@@ -51,6 +54,14 @@ entry, not the render hook.
   shared spatial post chains, and `fxaa/`, `ssaa/`, `smaa/` implementations.
 - `common/src/main/resources/`: shared mixin configurations and `assets/aamod/`,
   including `lang/en_us.json` and `lang/zh_cn.json`.
+- `client/compat/sodium/SodiumConfigEntryPoint.kt`: shared Sodium public Config
+  API registration, loaded through `sodium:config_api_user` metadata on both loaders.
+  Keep this optional entry isolated from always-loaded client initialization.
+- `client/compat/iris/`: lazy optional API access, immutable per-frame support,
+  pipeline revisions, and final-output availability. `mixin/compat/IrisPipelineMixin`
+  observes pipeline construction/destruction and completed color conversion.
+  Keep Iris types out of the controller and algorithm contracts. An installed,
+  enabled pack with no pipeline yet must pause preparation, especially SSAA.
 - `fabric/src/main/kotlin/`: Fabric entrypoints and platform implementation;
   `fabric/src/main/resources/fabric.mod.json` declares entrypoints and dependencies.
 - `neoforge/src/main/kotlin/`: NeoForge entrypoints and platform implementation;
@@ -91,6 +102,18 @@ targets at 25. See `AA_IMPLEMENTATION_PLAN_ZH.md` for the verification record.
 | `./gradlew.bat :fabric:build --configure-on-demand` | Build Fabric without configuring NeoForge. |
 | `./gradlew.bat :fabric:runClient` | Launch the Fabric development client. |
 | `./gradlew.bat :neoforge:runClient` | Launch the NeoForge development client. |
+| `./gradlew.bat :fabric:runClient -Penable_sodium=true` | Launch with optional Sodium; also supported on NeoForge. |
+| `./gradlew.bat :fabric:runClient -Penable_iris=true` | Launch with Iris and Sodium; also supported on NeoForge. |
+
+Sodium and Iris are disabled in the default development runtime. Sodium's public
+API and Iris are compile-only in common; optional runtime dependencies use `localRuntime`
+in the loader modules and must not be bundled in release jars. Keep version and
+enable switches in root `gradle.properties`.
+
+NeoForge Iris 1.11.4 trips an upstream vertex-format array bug under development
+graphics validation, reproduced with aamod absent. Shader runtime checks use
+production conditions in the temporary validation mod; never disable the global
+IDE/validation flag in shipped AA code. See plan section 15 for evidence.
 
 Final artifacts are `fabric/build/libs/aamod-fabric-<version>.jar` and
 `neoforge/build/libs/aamod-neoforge-<version>.jar`. `shadowJar` produces these;
