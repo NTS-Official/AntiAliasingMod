@@ -1,0 +1,9 @@
+{
+  "targets": {},
+  "passes": [{
+    "vertex_shader": "minecraft:core/screenquad",
+    "fragment_shader": "aamod:post/ssaa",
+    "inputs": [{ "sampler_name": "In", "target": "aamod:ssaa_source" }],
+    "output": "minecraft:main"
+  }]
+}

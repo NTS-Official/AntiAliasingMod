@@ -33,18 +33,22 @@ context. Treat GraphFlow output as structured, token-saving context.
 ## Project and Source Layout
 
 Anti Aliasing Mod (`aamod`) is an Architectury workspace targeting Minecraft 26.2
-on Fabric and NeoForge. It uses Kotlin with Java mixins. The existing code exposes
-OFF/FXAA/SMAA/TAA video settings. FXAA runs through shared render mixins and
-`client/antialiasing/`; SMAA and TAA remain explicitly unimplemented. Iris/Sodium
-compatibility is phase two. `AAModClient` is a lifecycle entry, not the render hook.
+on Fabric and NeoForge. It uses Kotlin, including client mixins. The existing code exposes
+OFF/FXAA/SMAA/TAA/SSAA video settings with persisted IDs 0/1/2/3/4. FXAA, SSAA and
+SMAA 1x run through shared render mixins and `client/antialiasing/`; TAA remains
+explicitly unimplemented. Iris/Sodium integration is phase three and TAA is phase
+four. `AAModClient` is a lifecycle
+entry, not the render hook.
 
 - `common/src/main/kotlin/com/nts/aamod/`: shared initialization, client code,
-  `option/VideoAntiAliasingSettings.kt`, and the `platform/PlatformHelper.kt` bridge.
-- `common/src/main/kotlin/com/nts/aamod/client/mixin/option/`: video settings mixins,
-  with Java sources compiled from the Kotlin source tree. `client/mixin/render/`
+  `client/option/` settings, `client/gui/AntiAliasingConfigScreen.kt`, and the
+  `platform/PlatformHelper.kt` bridge.
+- `common/src/main/kotlin/com/nts/aamod/client/mixin/option/`: video settings and
+  vanilla Options persistence mixins. `client/mixin/render/`
   owns frame, depth-lifetime, final-color, post-chain pipeline reuse, and reload hooks.
 - `common/src/main/kotlin/com/nts/aamod/client/antialiasing/`: controller, stage/input
-  contracts, immutable camera snapshots, environment provider, and FXAA resources.
+  contracts, immutable camera snapshots, environment provider, resolution plans,
+  shared spatial post chains, and `fxaa/`, `ssaa/`, `smaa/` implementations.
 - `common/src/main/resources/`: shared mixin configurations and `assets/aamod/`,
   including `lang/en_us.json` and `lang/zh_cn.json`.
 - `fabric/src/main/kotlin/`: Fabric entrypoints and platform implementation;
@@ -55,6 +59,15 @@ compatibility is phase two. `AAModClient` is a lifecycle entry, not the render h
 - Root `build.gradle`, `settings.gradle`, and `gradle.properties`: shared build
   configuration, included modules, versions, and metadata. Per-loader build files
   configure runtime dependencies and package the shared code.
+
+Fabric exposes the shared configuration screen through an optional Mod Menu
+entrypoint. NeoForge registers `IConfigScreenFactory` on its mod container. FXAA
+parameters persist through vanilla Options; render code reads an immutable
+snapshot and rebuilds only its own post chain when values change. SSAA scale and
+SMAA presets also persist through vanilla Options. SSAA keeps the main RenderTarget
+object stable because vanilla renderers cache it; attachments and dimensions swap
+for world rendering and restore before GUI. Follow the existing resource reload,
+failure isolation and device-size checks when extending these paths.
 
 Use actual source files and build scripts to resolve discrepancies with the
 English and Chinese READMEs; some documented Java paths describe an older layout.
@@ -68,7 +81,7 @@ from the repository root. On PowerShell use `./gradlew.bat`; on Linux/macOS use
 The machine default is JDK 27. Actual Gradle script configuration under JDK 27
 fails with `Unsupported class file major version 71`; use process-local JAVA_HOME
 for JDK 25 without changing the system default. Keep Java and Kotlin API/bytecode
-targets at 25. See `FXAA_IMPLEMENTATION_PLAN_ZH.md` for the verification record.
+targets at 25. See `AA_IMPLEMENTATION_PLAN_ZH.md` for the verification record.
 
 | Command (PowerShell) | Purpose |
 | --- | --- |
@@ -103,6 +116,11 @@ Documentation-only changes do not require launching Gradle or Minecraft.
   annotations such as `@JvmStatic` and `@JvmField` where Java callers require them.
 - Register mixins in the appropriate shared JSON configuration and keep class names,
   package names, target method signatures, and Java compatibility aligned.
+- Static Kotlin mixin handlers use a private companion object and `@JvmStatic`.
+  `Options.FieldAccess` uses an exact descriptor with visibility diagnostics
+  suppressed; Kotlin emits `@Coerce` with visibility that Mixin does not read.
+- Keep the NeoForge main source set registered in `loom.mods` so development
+  launches discover mod entrypoints in the Kotlin output directory.
 - Keep translation keys synchronized between `en_us.json` and `zh_cn.json`.
 - Put shared dependency versions and metadata in root `gradle.properties`.
   Metadata templates use `mod_*` keys and expand through root `processResources`.

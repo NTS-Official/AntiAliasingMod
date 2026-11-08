@@ -1,4 +1,4 @@
-package com.nts.aamod.option
+package com.nts.aamod.client.option
 
 import com.mojang.serialization.Codec
 import com.nts.aamod.client.antialiasing.AntiAliasingController
@@ -13,11 +13,12 @@ object VideoAntiAliasingSettings {
     const val FXAA = 1
     const val SMAA = 2
     const val TAA = 3
+    const val SSAA = 4
 
     const val OPTIONS_KEY = "antialiasing"
 
-    @JvmField val MODES = listOf(OFF, FXAA, SMAA, TAA)
-    @JvmField val MODES_STR = listOf("OFF", "FXAA", "SMAA", "TAA")
+    @JvmField val MODES = listOf(OFF, FXAA, SSAA, SMAA, TAA)
+    @JvmField val MODES_STR = listOf("OFF", "FXAA", "SSAA", "SMAA", "TAA")
 
     private val OPTION: OptionInstance<Int> = OptionInstance(
         "options.antialiasing",

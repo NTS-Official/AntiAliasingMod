@@ -4,8 +4,8 @@
 
 ## Introduction
 
-A Minecraft mod that implements FXAA through the default Blaze3D rendering
-abstraction, with extension points for future SMAA and TAA implementations.
+A Minecraft mod that implements FXAA, SSAA and SMAA 1x through the default
+Blaze3D rendering abstraction, with TAA planned for a later phase.
 
 This repository is an **Architectury-based multi-loader workspace**: one shared
 codebase builds a Fabric jar and a NeoForge jar.
@@ -15,18 +15,63 @@ codebase builds a Fabric jar and a NeoForge jar.
 - **FXAA is implemented** on the vanilla rendering path, after vanilla entity
   post effects and before HUD / GUI rendering. It filters world geometry and held
   items without filtering GUI text, menus, or the crosshair.
-- **SMAA and TAA are placeholders** with explicit status text. Selecting them
-  does not run FXAA as a substitute.
-- **Iris / Sodium compatibility is phase two** and is not validated yet.
+- **SSAA renders the world at a higher resolution**, then applies an area filter
+  before the HUD. Available scales are 1.5×, 2×, 3× and 4× per axis; the default is 2×.
+- **SMAA 1x uses color edge detection, Area/Search lookup textures and neighborhood
+  blending**, with the official Low, Medium, High and Ultra presets. High is the default.
+- **TAA remains a placeholder** with explicit status text and no substitute algorithm.
 
-Select FXAA in Options → Video Settings → Anti-Aliasing. It takes effect on the
-next world frame and persists in the vanilla `options.txt` as `antialiasing:1`.
+The roadmap has four phases:
+
+| Phase | Scope | Status |
+| --- | --- | --- |
+| One | Vanilla FXAA and shared extension points | Implemented; see the verification record for coverage |
+| Two | Vanilla SSAA and SMAA 1x | Implemented; verification details and limits are recorded in the plan |
+| Three | Iris / Sodium integration | Planned; compatibility is verified per algorithm |
+| Four | TAA | Planned: jitter, history reprojection, and multiple sampling sequences |
+
+Current rendering verification covers the vanilla path without Iris / Sodium.
+
+Select a mode in Options → Video Settings → Anti-Aliasing. It takes effect on the
+next world frame and persists in the vanilla `options.txt` as `antialiasing`:
+OFF = 0, FXAA = 1, SMAA = 2, TAA = 3 and SSAA = 4.
 Missing or invalid values fall back to OFF. Existing graphics preset mappings
-remain Fast → OFF, Fancy → SMAA, Fabulous → TAA; choose FXAA manually to enable it.
+remain Fast → OFF, Fancy → SMAA, Fabulous → TAA.
+
+### FXAA configuration
+
+On Fabric, install **Mod Menu** and open Mods → Anti Aliasing Mod → Configure.
+On NeoForge, use the built-in mod list's configuration button. Both open the
+same screen with an AA mode selector and live FXAA controls:
+
+| Parameter | Range | Default |
+| --- | --- | --- |
+| Subpixel blending | 0–1 | 0.7500 |
+| Relative edge threshold | 0–1 | 0.1660 |
+| Minimum luma threshold | 0–1 | 0.0833 |
+| Edge search steps per direction, including the first sample | 1–5 | 5 |
+
+Tooltips explain the image quality and cost tradeoffs. Reset FXAA Defaults resets
+only these parameters. Changes apply while FXAA is selected without a restart or
+resource reload, and persist with vanilla options when the screen closes.
+The keys are `aamod_fxaa_subpixel`, `aamod_fxaa_edge_threshold`,
+`aamod_fxaa_minimum_threshold`, and `aamod_fxaa_search_steps`. Missing, non-finite,
+or out-of-range values fall back to each parameter's default. Mod Menu is optional
+for the mod itself; without it, the vanilla video settings AA mode still works.
 
 FXAA can soften fine details and does not provide temporal stabilization.
+The same configuration screen includes SSAA scale and SMAA quality. These persist
+as `aamod_ssaa_scale` (indices 1–4 for 1.5× / 2× / 3× / 4×) and
+`aamod_smaa_quality` (0–3 for Low / Medium / High / Ultra). Missing or invalid
+values restore 2× and High respectively. The FXAA reset button only resets FXAA.
+SSAA pixel and attachment costs grow with the square of the scale; an unsupported
+texture size or rendering failure preserves the requested setting and reports a
+failure instead of silently selecting another algorithm. Reload resources or
+change mode to retry. SMAA upstream provenance and license are bundled under
+`assets/aamod/licenses/`.
+
 The current client verification uses OpenGL; Vulkan has not been validated.
-See [the implementation plan and verification record](FXAA_IMPLEMENTATION_PLAN_ZH.md)
+See [the implementation plan and verification record](AA_IMPLEMENTATION_PLAN_ZH.md)
 for stage boundaries and follow-up work.
 
 ## Workspace layout
@@ -38,7 +83,7 @@ for stage boundaries and follow-up work.
 ├── gradle.properties         # ALL versions and mod metadata live here
 ├── common/                   # loader-agnostic code + shared resources
 │   └── src/main/
-│       ├── kotlin/           # Kotlin code, Java mixins, AA renderer, PlatformHelper
+│       ├── kotlin/           # Kotlin code and mixins, AA renderer, PlatformHelper
 │       └── resources/        # mixin configs, assets/aamod/lang, icon
 ├── fabric/                   # Fabric entrypoints, fabric.mod.json
 │   └── src/main/

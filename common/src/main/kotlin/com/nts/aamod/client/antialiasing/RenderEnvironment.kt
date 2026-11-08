@@ -29,6 +29,9 @@ interface RenderEnvironmentProvider {
 
     fun preparationInputs(context: FrameContext): Set<RenderInput>
 
+    fun planResolution(context: FrameContext, scale: Double, maximum: Int): RenderResolution =
+        throw UnsupportedOperationException("This render provider cannot control world resolution")
+
     fun capture(stage: RenderStage, target: RenderTarget, context: FrameContext): RenderEnvironment
 }
 
@@ -37,8 +40,12 @@ object VanillaRenderEnvironment : RenderEnvironmentProvider {
 
     override fun support(mode: Int) = RenderSupport(true)
 
+    override fun planResolution(context: FrameContext, scale: Double, maximum: Int): RenderResolution =
+        RenderResolution.create(context.width, context.height, scale, maximum)
+
     override fun preparationInputs(context: FrameContext): Set<RenderInput> = buildSet {
         add(RenderInput.PROJECTION_CONTROL)
+        add(RenderInput.RESOLUTION_CONTROL)
         if (context.camera != null) add(RenderInput.CAMERA_MATRICES)
     }
 

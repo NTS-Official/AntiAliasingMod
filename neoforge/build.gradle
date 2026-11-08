@@ -7,6 +7,14 @@ architectury {
     neoForge()
 }
 
+loom {
+    mods {
+        main {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
 configurations {
     common {
         canBeResolved = true

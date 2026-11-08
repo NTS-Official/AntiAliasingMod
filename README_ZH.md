@@ -11,16 +11,45 @@
 #### 当前实现状态
 
 - **FXAA 已实现**：使用方向判定、边缘端点搜索和子像素处理，平滑世界与手持物品轮廓，可能轻微软化细节。
-- **SMAA、TAA 尚未实现**：保留设置编号并明确提示，不执行其它算法替代。
-- **Iris / Sodium 兼容属于第二阶段**，目前只验证未安装这两个模组的原版渲染路径。
+- **SSAA 已实现**：世界先按每轴 1.5×、2×、3× 或 4× 分辨率渲染，再进行面积覆盖低通降采样；默认 2×。
+- **SMAA 1x 已实现**：颜色边缘检测、Area / Search 查找纹理权重计算、邻域混合，提供官方低 / 中 / 高 / 极高预设；默认高。
+- **TAA 尚未实现**：保留设置编号并明确提示，不执行其它算法替代。
 
-在「选项 → 视频设置 → 抗锯齿」选择 FXAA，下一有效世界帧生效；选择关闭即停用。设置通过原版 `options.txt` 的 `antialiasing` 键保存，缺失或非法值回到关闭。FXAA 在原版实体视角特效之后、HUD / GUI 之前执行，字体、准星与菜单不会被本模组过滤。
+后续按以下四阶段推进：
 
-已有画质预设映射保留：流畅 → 关闭、精美 → SMAA、极佳 → TAA。后两者目前仍是未实现状态，需要手动选择 FXAA 才会启用实际处理。
+| 阶段 | 目标 | 当前状态 |
+| --- | --- | --- |
+| 第一阶段 | 原版 FXAA 与公共扩展预留 | 已实现，验证范围见方案文档 |
+| 第二阶段 | 原版 SSAA 与 SMAA 1x | 已实现，实际验证与限制见方案文档 |
+| 第三阶段 | Iris / Sodium 适配 | 待实现，按算法分别验证兼容性 |
+| 第四阶段 | TAA | 待实现，包含 jitter、历史重投影及多种采样序列 |
 
-第一阶段架构、接入点、生命周期和验证记录见 [FXAA 实现与抗锯齿扩展方案](FXAA_IMPLEMENTATION_PLAN_ZH.md)。
+目前只验证未安装 Iris / Sodium 的原版渲染路径。
 
-TAA 的多种手动切换采样方案见 [时域采样方案](TEMPORAL_SAMPLING_PLAN_ZH.md)，包含 Halton、Hammersley、Owen-scrambled Sobol、Rank-1/R2 和渐进式泊松蓝噪声。该方案不依赖神经超分。
+在「选项 → 视频设置 → 抗锯齿」选择模式，下一有效世界帧生效；选择关闭即停用。设置通过原版 `options.txt` 的 `antialiasing` 键保存：关闭 = 0、FXAA = 1、SMAA = 2、TAA = 3、SSAA = 4，缺失或非法值回到关闭。三种已实现算法均在原版实体视角特效之后、HUD / GUI 之前输出，字体、准星与菜单不会被本模组过滤。
+
+已有画质预设映射保留：流畅 → 关闭、精美 → SMAA、极佳 → TAA；TAA 仍显示尚未实现。
+
+#### FXAA 参数配置
+
+Fabric 安装 **Mod Menu** 后，在「模组 → Anti Aliasing Mod → 配置」打开设置；NeoForge 使用内置模组列表的配置按钮。两端共用同一页面，可切换抗锯齿模式，并即时调整以下 FXAA 参数：
+
+| 参数 | 范围 | 默认值 | 作用 |
+| --- | --- | --- | --- |
+| 子像素混合强度 | 0–1 | 0.7500 | 越高越能平滑细小轮廓，也可能软化细节 |
+| 相对边缘阈值 | 0–1 | 0.1660 | 越低处理的边缘越多，可能增加采样开销 |
+| 最小亮度阈值 | 0–1 | 0.0833 | 越低越能覆盖暗部和低对比边缘 |
+| 边缘搜索步数 | 1–5 | 5 | 每个方向包含初始采样的搜索次数，越高越有利于长边缘 |
+
+点击「恢复 FXAA 默认值」只重置这四项参数。参数在 FXAA 下生效，关闭页面时随原版选项保存，无须重启或重载资源。保存键为 `aamod_fxaa_subpixel`、`aamod_fxaa_edge_threshold`、`aamod_fxaa_minimum_threshold`、`aamod_fxaa_search_steps`；缺失、非有限数和越界值恢复对应默认值。Mod Menu 只提供 Fabric 配置入口，未安装时视频设置中的模式选项和 FXAA 仍可使用。
+
+同一页面还提供 SSAA 世界分辨率倍率和 SMAA 质量预设。保存键 `aamod_ssaa_scale` 的 1–4 分别表示 1.5× / 2× / 3× / 4×；`aamod_smaa_quality` 的 0–3 分别表示低 / 中 / 高 / 极高。缺失或非法值恢复为 2× 和高。「恢复 FXAA 默认值」仅重置 FXAA。
+
+SSAA 像素与附件开销随倍率平方增长。请求尺寸超过设备限制或处理失败时保留用户设置，显示失败状态；切换模式或重载资源后重试。SMAA 上游来源、转换说明与许可随 jar 打包在 `assets/aamod/licenses/`。
+
+四阶段路线、架构、接入点、生命周期和前两阶段验证记录见 [抗锯齿四阶段实施与扩展方案](AA_IMPLEMENTATION_PLAN_ZH.md)。
+
+第四阶段 TAA 的多种手动切换采样方案见 [时域采样方案](TEMPORAL_SAMPLING_PLAN_ZH.md)，包含 Halton、Hammersley、Owen-scrambled Sobol、Rank-1/R2 和渐进式泊松蓝噪声。该方案不依赖神经超分。
 
 ## 跨加载器工作区
 
@@ -33,7 +62,7 @@ TAA 的多种手动切换采样方案见 [时域采样方案](TEMPORAL_SAMPLING_
 ├── gradle.properties         # 所有版本号与模组元数据集中在此
 ├── common/                   # 与加载器无关的代码与共享资源
 │   └── src/main/
-│       ├── kotlin/           # Kotlin 代码、Java mixin、抗锯齿控制器和 PlatformHelper
+│       ├── kotlin/           # Kotlin 代码与 mixin、抗锯齿控制器和 PlatformHelper
 │       └── resources/        # mixin 配置、assets/aamod/lang、图标
 ├── fabric/                   # Fabric 入口、fabric.mod.json、PlatformHelperImpl
 └── neoforge/                 # NeoForge 入口、neoforge.mods.toml、PlatformHelperImpl

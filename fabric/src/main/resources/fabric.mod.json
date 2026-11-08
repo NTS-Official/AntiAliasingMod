@@ -20,6 +20,9 @@
     ],
     "client": [
       "${mod_group}.fabric.client.AAModFabricClient"
+    ],
+    "modmenu": [
+      "${mod_group}.fabric.client.AAModModMenu"
     ]
   },
   "mixins": [

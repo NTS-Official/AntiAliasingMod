@@ -14,6 +14,7 @@ enum class RenderInput {
     FINAL_COLOR,
     CAMERA_MATRICES,
     PROJECTION_CONTROL,
+    RESOLUTION_CONTROL,
     HISTORY,
     MOTION_VECTORS
 }
@@ -53,6 +54,10 @@ interface AntiAliasingMethod : AutoCloseable {
     fun prepareFrame(context: FrameContext) {}
 
     fun prepareProjection(context: FrameContext, projection: Matrix4f) {}
+
+    fun beginWorldRender(context: FrameContext) {}
+
+    fun endWorldRender() {}
 
     fun render(context: FrameContext, environment: RenderEnvironment)
 

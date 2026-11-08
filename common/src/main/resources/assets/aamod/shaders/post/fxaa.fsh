@@ -7,14 +7,18 @@ layout(std140) uniform SamplerInfo {
     vec2 InSize;
 };
 
+layout(std140) uniform FxaaConfig {
+    float Subpixel;
+    float EdgeThreshold;
+    float MinimumThreshold;
+    int SearchSteps;
+};
+
 in vec2 texCoord;
 out vec4 fragColor;
 
-const float SUBPIXEL = 0.75;
-const float EDGE_THRESHOLD = 0.166;
-const float MINIMUM_THRESHOLD = 0.0833;
-const int SEARCH_STEPS = 5;
-const float SEARCH_DISTANCES[SEARCH_STEPS] = float[](1.0, 1.5, 2.0, 4.0, 12.0);
+const int MAX_SEARCH_STEPS = 5;
+const float SEARCH_DISTANCES[MAX_SEARCH_STEPS] = float[](1.0, 1.5, 2.0, 4.0, 12.0);
 
 float luminance(vec3 color) {
     return dot(color, vec3(0.299, 0.587, 0.114));
@@ -35,7 +39,7 @@ void main() {
     float minimum = min(center, min(min(north, south), min(west, east)));
     float maximum = max(center, max(max(north, south), max(west, east)));
     float contrast = maximum - minimum;
-    if (contrast < max(MINIMUM_THRESHOLD, maximum * EDGE_THRESHOLD)) {
+    if (contrast <= 0.0 || contrast < max(MinimumThreshold, maximum * EdgeThreshold)) {
         fragColor = centerColor;
         return;
     }
@@ -71,8 +75,8 @@ void main() {
     bool negativeDone = abs(negativeDelta) >= gradientThreshold;
     bool positiveDone = abs(positiveDelta) >= gradientThreshold;
 
-    for (int searchIndex = 1; searchIndex < SEARCH_STEPS; searchIndex++) {
-        if (negativeDone && positiveDone) break;
+    for (int searchIndex = 1; searchIndex < MAX_SEARCH_STEPS; searchIndex++) {
+        if (searchIndex >= SearchSteps || (negativeDone && positiveDone)) break;
         float distanceStep = SEARCH_DISTANCES[searchIndex];
         if (!negativeDone) {
             negativePosition -= tangentStep * distanceStep;
@@ -97,7 +101,7 @@ void main() {
         + northWest + northEast + southWest + southEast) / 12.0;
     float subpixel = clamp(abs(neighborhoodAverage - center) / contrast, 0.0, 1.0);
     subpixel = subpixel * subpixel * (3.0 - 2.0 * subpixel);
-    subpixel = subpixel * subpixel * SUBPIXEL;
+    subpixel = subpixel * subpixel * Subpixel;
     float offset = max(edgeOffset, subpixel);
     vec3 filtered = textureLod(InSampler, texCoord + normalStep * offset, 0.0).rgb;
     fragColor = vec4(filtered, centerColor.a);

@@ -1,0 +1,75 @@
+{
+  "targets": {
+    "aamod:smaa_edges": {},
+    "aamod:smaa_weights": {},
+    "aamod:smaa_output": {}
+  },
+  "passes": [
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "aamod:post/smaa_edge_medium",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "minecraft:main",
+          "bilinear": true
+        }
+      ],
+      "output": "aamod:smaa_edges"
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "aamod:post/smaa_weights_medium",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "aamod:smaa_edges",
+          "bilinear": true
+        },
+        {
+          "sampler_name": "Area",
+          "location": "aamod:smaa_area",
+          "width": 160,
+          "height": 560,
+          "bilinear": true
+        },
+        {
+          "sampler_name": "Search",
+          "location": "aamod:smaa_search",
+          "width": 64,
+          "height": 16,
+          "bilinear": true
+        }
+      ],
+      "output": "aamod:smaa_weights"
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "aamod:post/smaa_neighborhood_medium",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "minecraft:main",
+          "bilinear": true
+        },
+        {
+          "sampler_name": "Blend",
+          "target": "aamod:smaa_weights",
+          "bilinear": true
+        }
+      ],
+      "output": "aamod:smaa_output"
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "aamod:post/copy",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "aamod:smaa_output"
+        }
+      ],
+      "output": "minecraft:main"
+    }
+  ]
+}

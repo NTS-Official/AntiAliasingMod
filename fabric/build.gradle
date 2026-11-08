@@ -30,6 +30,7 @@ dependencies {
     api "dev.architectury:architectury-fabric:${rootProject.architectury_api_version}"
 
     compileOnly "com.terraformersmc:modmenu:${rootProject.modmenu_version}"
+    localRuntime "com.terraformersmc:modmenu:${rootProject.modmenu_version}"
 
     common(project(path: ':common')) { transitive false }
     shadowCommon(project(path: ':common', configuration: 'transformProductionFabric')) { transitive false }

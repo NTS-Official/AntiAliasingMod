@@ -18,13 +18,16 @@ import com.nts.aamod.client.antialiasing.InvalidationReason
 import com.nts.aamod.client.antialiasing.RenderEnvironment
 import com.nts.aamod.client.antialiasing.RenderInput
 import com.nts.aamod.client.antialiasing.RenderStage
-import com.nts.aamod.option.VideoAntiAliasingSettings
+import com.nts.aamod.client.option.VideoAntiAliasingSettings
+import com.nts.aamod.client.option.FxaaParameters
+import com.nts.aamod.client.option.FxaaSettings
 import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.PostChain
 import net.minecraft.client.renderer.PostChainConfig
 import net.minecraft.client.renderer.Projection
 import net.minecraft.client.renderer.ProjectionMatrixBuffer
 import net.minecraft.client.renderer.RenderPipelines
+import net.minecraft.client.renderer.UniformValue
 import net.minecraft.util.StrictJsonParser
 import java.util.IdentityHashMap
 
@@ -34,6 +37,7 @@ class FxaaMethod : AntiAliasingMethod {
 
     private var chain: PostChain? = null
     private var projectionBuffer: ProjectionMatrixBuffer? = null
+    private var parameters: FxaaParameters? = null
     private val resourcePool = CrossFrameResourcePool(3)
 
     override fun render(context: FrameContext, environment: RenderEnvironment) {
@@ -41,7 +45,12 @@ class FxaaMethod : AntiAliasingMethod {
         check(environment.format == GpuFormat.RGBA8_UNORM && environment.colorEncoding == ColorEncoding.DISPLAY) {
             "FXAA requires RGBA8 display color, received ${environment.format} / ${environment.colorEncoding}"
         }
-        val activeChain = chain ?: loadChain().also { chain = it }
+        val frameParameters = FxaaSettings.snapshot()
+        if (parameters != frameParameters) closeChain()
+        val activeChain = chain ?: loadChain(frameParameters).also {
+            chain = it
+            parameters = frameParameters
+        }
         val frameGraph = FrameGraphBuilder()
         val target = environment.target
         val targets = PostChain.TargetBundle.of(PostChain.MAIN_TARGET_ID, frameGraph.importExternal("aamod_main", target))
@@ -66,18 +75,37 @@ class FxaaMethod : AntiAliasingMethod {
     }
 
     override fun close() {
+        closeChain()
+        resourcePool.clear()
+    }
+
+    private fun closeChain() {
         chain?.close()
         chain = null
         projectionBuffer?.close()
         projectionBuffer = null
-        resourcePool.clear()
+        parameters = null
     }
 
-    private fun loadChain(): PostChain {
+    private fun loadChain(frameParameters: FxaaParameters): PostChain {
         val minecraft = Minecraft.getInstance()
-        val config = minecraft.resourceManager.getResourceOrThrow(AAMod.id("post_effect/fxaa.json")).openAsReader().use { reader ->
+        val resourceConfig = minecraft.resourceManager.getResourceOrThrow(AAMod.id("post_effect/fxaa.json")).openAsReader().use { reader ->
             PostChainConfig.CODEC.parse(JsonOps.INSTANCE, StrictJsonParser.parse(reader)).getOrThrow()
         }
+        val uniforms = listOf(
+            UniformValue.FloatUniform(frameParameters.subpixel),
+            UniformValue.FloatUniform(frameParameters.edgeThreshold),
+            UniformValue.FloatUniform(frameParameters.minimumThreshold),
+            UniformValue.IntUniform(frameParameters.searchSteps)
+        )
+        val config = PostChainConfig(resourceConfig.internalTargets(), resourceConfig.passes().map { pass ->
+            if (pass.fragmentShaderId() == AAMod.id("post/fxaa")) {
+                PostChainConfig.Pass(
+                    pass.vertexShaderId(), pass.fragmentShaderId(), pass.inputs(), pass.outputTarget(),
+                    pass.uniforms() + ("FxaaConfig" to uniforms)
+                )
+            } else pass
+        })
         precompile(config)
         val projection = Projection().apply { setupOrtho(0.1f, 1000f, 1f, 1f, false) }
         val buffer = ProjectionMatrixBuffer("aamod FXAA")

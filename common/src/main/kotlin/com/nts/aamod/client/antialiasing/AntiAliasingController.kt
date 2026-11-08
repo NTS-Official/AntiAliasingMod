@@ -6,7 +6,9 @@ import com.mojang.blaze3d.pipeline.RenderTarget
 import com.mojang.blaze3d.systems.RenderSystem
 import com.nts.aamod.AAMod
 import com.nts.aamod.client.antialiasing.fxaa.FxaaMethod
-import com.nts.aamod.option.VideoAntiAliasingSettings
+import com.nts.aamod.client.antialiasing.ssaa.SsaaMethod
+import com.nts.aamod.client.antialiasing.smaa.SmaaMethod
+import com.nts.aamod.client.option.VideoAntiAliasingSettings
 import net.minecraft.client.Minecraft
 import net.minecraft.client.CameraType
 import net.minecraft.client.multiplayer.ClientLevel
@@ -17,7 +19,11 @@ import org.joml.Matrix4f
 import java.util.EnumSet
 
 object AntiAliasingController {
-    private val methods: Map<Int, AntiAliasingMethod> = mapOf(VideoAntiAliasingSettings.FXAA to FxaaMethod())
+    private val methods: Map<Int, AntiAliasingMethod> = mapOf(
+        VideoAntiAliasingSettings.FXAA to FxaaMethod(),
+        VideoAntiAliasingSettings.SSAA to SsaaMethod(),
+        VideoAntiAliasingSettings.SMAA to SmaaMethod()
+    )
     private var provider: RenderEnvironmentProvider = VanillaRenderEnvironment
     private var frameProvider: RenderEnvironmentProvider = provider
     private var providerIdentity: Any = provider.identity
@@ -32,6 +38,7 @@ object AntiAliasingController {
     private var previousHeight = 0
     private val previousTargets = mutableMapOf<RenderStage, TargetState>()
     private var renderedWorld = false
+    private var framePrepared = false
     private var failedMode: Int? = null
     private val completedStages = EnumSet.noneOf(RenderStage::class.java)
 
@@ -44,6 +51,21 @@ object AntiAliasingController {
     fun setEnvironmentProvider(replacement: RenderEnvironmentProvider) {
         RenderSystem.assertOnRenderThread()
         provider = replacement
+    }
+
+    fun planResolution(context: FrameContext, scale: Double, maximum: Int): RenderResolution =
+        frameProvider.planResolution(context, scale, maximum)
+
+    @JvmStatic
+    fun beginWorldRender() {
+        val method = currentMethod() ?: return
+        if (RenderStage.FRAME_PREPARE in method.requirements && !framePrepared) return
+        guarded(method) { method.beginWorldRender(checkNotNull(frame)) }
+    }
+
+    @JvmStatic
+    fun endWorldRender() {
+        methods.values.forEach { it.endWorldRender() }
     }
 
     @JvmStatic
@@ -65,6 +87,7 @@ object AntiAliasingController {
         providerIdentity = identity
         frameProvider = provider
         renderedWorld = false
+        framePrepared = false
         completedStages.clear()
         val context = FrameContext(
             ++frameId,
@@ -93,7 +116,10 @@ object AntiAliasingController {
         val method = currentMethod() ?: return
         if (RenderStage.FRAME_PREPARE in method.requirements) {
             guarded(method) {
-                if (canPrepare(method, context)) method.prepareFrame(context)
+                if (canPrepare(method, context)) {
+                    method.prepareFrame(context)
+                    framePrepared = true
+                }
             }
         }
     }
@@ -138,13 +164,18 @@ object AntiAliasingController {
 
     @JvmStatic
     fun finalColor(target: RenderTarget) {
-        if (renderedWorld) dispatch(RenderStage.FINAL_COLOR, target)
+        try {
+            if (renderedWorld) dispatch(RenderStage.FINAL_COLOR, target)
+        } finally {
+            endWorldRender()
+        }
     }
 
     @JvmStatic
     fun invalidate(reason: InvalidationReason) {
         RenderSystem.assertOnRenderThread()
         methods.values.forEach { it.invalidate(reason) }
+        previousTargets.clear()
         if (reason == InvalidationReason.RESOURCES_RELOADED || reason == InvalidationReason.MODE_CHANGED) {
             failedMode = null
         }
@@ -181,6 +212,7 @@ object AntiAliasingController {
     private fun dispatch(stage: RenderStage, target: RenderTarget) {
         val context = frame ?: return
         val method = currentMethod() ?: return
+        if (RenderStage.FRAME_PREPARE in method.requirements && !framePrepared) return
         val requirements = method.requirements[stage] ?: return
         if (!completedStages.add(stage)) return
         guarded(method) {
@@ -191,7 +223,7 @@ object AntiAliasingController {
             }
             val targetState = TargetState(environment.width, environment.height, environment.format)
             val previousTarget = previousTargets.put(stage, targetState)
-            if (previousTarget != null && (environment.width != previousTarget.width || environment.height != previousTarget.height)) {
+            if (method.mode != VideoAntiAliasingSettings.SSAA && previousTarget != null && (environment.width != previousTarget.width || environment.height != previousTarget.height)) {
                 invalidate(InvalidationReason.SIZE_CHANGED)
             }
             if (previousTarget != null && environment.format != previousTarget.format) invalidate(InvalidationReason.FORMAT_CHANGED)

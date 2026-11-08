@@ -9,6 +9,7 @@
     "option.OptionFieldAccess",
     "option.OptionsMixin",
     "render.GameRendererMixin",
+    "render.RenderTargetAccess",
     "render.LevelRendererMixin",
     "render.PostChainMixin",
     "render.ShaderManagerMixin"

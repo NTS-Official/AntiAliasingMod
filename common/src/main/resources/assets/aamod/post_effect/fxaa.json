@@ -13,7 +13,15 @@
           "bilinear": true
         }
       ],
-      "output": "aamod:fxaa_swap"
+      "output": "aamod:fxaa_swap",
+      "uniforms": {
+        "FxaaConfig": [
+          { "type": "float", "value": 0.75 },
+          { "type": "float", "value": 0.166 },
+          { "type": "float", "value": 0.0833 },
+          { "type": "int", "value": 5 }
+        ]
+      }
     },
     {
       "vertex_shader": "minecraft:core/screenquad",

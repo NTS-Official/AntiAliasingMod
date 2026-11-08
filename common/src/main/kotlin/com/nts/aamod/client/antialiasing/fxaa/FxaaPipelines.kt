@@ -10,7 +10,7 @@ object FxaaPipelines {
     @JvmStatic
     fun reuse(pipeline: RenderPipeline): RenderPipeline {
         val location = pipeline.location
-        if (location.namespace != AAMod.MOD_ID || !location.path.startsWith("fxaa/")) return pipeline
+        if (location.namespace != AAMod.MOD_ID || listOf("fxaa/", "ssaa/", "smaa/").none(location.path::startsWith)) return pipeline
         return pipelines.getOrPut(location) { pipeline }
     }
 
