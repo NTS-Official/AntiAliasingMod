@@ -3,6 +3,7 @@ package com.nts.aamod.client.option
 import com.mojang.serialization.Codec
 import com.nts.aamod.client.antialiasing.AntiAliasingController
 import com.nts.aamod.client.mixin.option.OptionsAccessor
+import com.nts.aamod.platform.PlatformHelper
 import net.minecraft.client.Minecraft
 import net.minecraft.client.OptionInstance
 import net.minecraft.client.gui.components.Tooltip
@@ -25,6 +26,11 @@ object VideoAntiAliasingSettings {
         { _ ->
             Tooltip.create(
                 Component.translatable("options.antialiasing.tooltip")
+                    .also { tooltip ->
+                        if (PlatformHelper.getModVersion("iris") != null) {
+                            tooltip.append("\n\n").append(Component.translatable("options.antialiasing.tooltip.iris"))
+                        }
+                    }
                     .append("\n\n")
                     .append(Component.translatable("options.antialiasing.status." + AntiAliasingController.getStatus().state.name.lowercase()))
                     .also { tooltip -> AntiAliasingController.getStatus().reason?.let { tooltip.append("\n").append(Component.translatable(it)) } }
@@ -73,7 +79,7 @@ object VideoAntiAliasingSettings {
     @JvmStatic
     fun applyFromPreset(serializedName: String) {
         val mode = when (serializedName) {
-            "fast" -> OFF
+            "fast" -> FXAA
             "fancy" -> SMAA
             "fabulous" -> TAA
             else -> return

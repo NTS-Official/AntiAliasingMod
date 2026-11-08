@@ -66,6 +66,12 @@ tasks.named('runClientWithIris') {
     classpath configurations.irisRuntime
 }
 
+tasks.named('processResources') {
+    from(project(':common').layout.projectDirectory.dir('src/main/resources')) {
+        include 'assets/aamod/icon.png'
+    }
+}
+
 jar {
     archiveClassifier = 'raw'
 }

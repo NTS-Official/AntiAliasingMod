@@ -36,8 +36,9 @@ boundaries below. TAA remains phase four.
 Select a mode in Options → Video Settings → Anti-Aliasing. It takes effect on the
 next world frame and persists in the vanilla `options.txt` as `antialiasing`:
 OFF = 0, FXAA = 1, SMAA = 2, TAA = 3 and SSAA = 4.
-Missing or invalid values fall back to OFF. Existing graphics preset mappings
-remain Fast → OFF, Fancy → SMAA, Fabulous → TAA.
+Missing or invalid values fall back to OFF. Selecting a graphics preset also selects
+its AA mode: Fast → FXAA, Fancy → SMAA, Fabulous → TAA. Manually changing the AA
+mode switches the graphics preset to Custom. TAA remains unimplemented.
 
 ### FXAA configuration
 
@@ -57,8 +58,12 @@ Available FXAA controls:
 | Minimum luma threshold | 0–1 | 0.0833 |
 | Edge search steps per direction, including the first sample | 1–5 | 5 |
 
-Tooltips explain the image quality and cost tradeoffs. Reset FXAA Defaults resets
-only these parameters. Changes apply while FXAA is selected without a restart or
+Tooltips explain the image quality and cost tradeoffs. Each parameter has its own
+Reset button, visible only when its value differs from the default. Resetting
+changes only that option and hides its button. A parameter is centered on its own
+when Reset is hidden; otherwise the parameter and Reset are centered together.
+The top AA mode selector is always centered and has no reset button. Its default is OFF.
+Changes apply while FXAA is running without a restart or
 resource reload, and persist with vanilla options when the screen closes.
 The keys are `aamod_fxaa_subpixel`, `aamod_fxaa_edge_threshold`,
 `aamod_fxaa_minimum_threshold`, and `aamod_fxaa_search_steps`. Missing, non-finite,
@@ -69,7 +74,7 @@ FXAA can soften fine details and does not provide temporal stabilization.
 The same configuration screen includes SSAA scale and SMAA quality. These persist
 as `aamod_ssaa_scale` (indices 1–4 for 1.5× / 2× / 3× / 4×) and
 `aamod_smaa_quality` (0–3 for Low / Medium / High / Ultra). Missing or invalid
-values restore 2× and High respectively. The FXAA reset button only resets FXAA.
+values restore 2× and High respectively. Each also has an individual reset button.
 SSAA pixel and attachment costs grow with the square of the scale; an unsupported
 texture size or rendering failure preserves the requested setting and reports a
 failure instead of silently selecting another algorithm. Reload resources or
@@ -81,6 +86,11 @@ See [the implementation plan and verification record](AA_IMPLEMENTATION_PLAN_ZH.
 for stage boundaries and follow-up work.
 
 ### Iris shader compatibility
+
+The Iris section, policy control and live status are shown only when Iris is
+installed. Without Iris, the section and Iris-specific mode tooltip are hidden.
+The policy has an individual reset button and defaults to Automatic; this pauses
+this mod's AA with active shaders and does not enable the shader pack's own AA.
 
 The shared configuration screen includes **Shader Pack Anti-Aliasing**:
 
