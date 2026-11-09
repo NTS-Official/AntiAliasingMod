@@ -22,6 +22,7 @@
   "aamod.config.iris.policy.tooltip": "Default: Automatic. Automatic pauses this mod's AA while an Iris shader pack is active; it does not enable the pack's AA. Apply after shaders only allows the selected FXAA / SMAA mode on supported sRGB / RGBA8 output and can duplicate smoothing. Shader pack options are never changed. SSAA and TAA pause with active shaders. Without active shaders, all implemented modes remain available.",
   "aamod.compat.iris.absent": "Iris: not installed",
   "aamod.compat.iris.disabled": "Iris: shaders inactive",
+  "aamod.compat.iris.backend_inactive": "Iris: inactive on Vulkan; using the native rendering path",
   "aamod.compat.iris.automatic": "Iris: automatic policy pauses this mod's AA.",
   "aamod.compat.iris.preparing": "AA paused: preparing Iris shader pipeline.",
   "aamod.compat.iris.overlay": "Iris: FXAA / SMAA after shaders; SSAA / TAA unavailable",

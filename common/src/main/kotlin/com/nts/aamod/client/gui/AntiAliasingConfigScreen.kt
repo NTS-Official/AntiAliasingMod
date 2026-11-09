@@ -34,7 +34,7 @@ class AntiAliasingConfigScreen(parent: Screen) : OptionsSubScreen(
                 optionList.addHeader(Component.translatable("aamod.config.iris"))
                 optionList.addOption(IrisSettings.policy, IrisSettings.AUTOMATIC)
                 optionList.addHeader(IrisCompatibility.describe())
-                val entries: List<*> = optionList.children()
+                val entries = optionList.children()
                 irisStatus = (entries.last() as ContainerEventHandler).children().filterIsInstance<StringWidget>().single()
             }
             optionList.addHeader(Component.translatable("aamod.config.fxaa"))

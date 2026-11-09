@@ -2,6 +2,7 @@ package com.nts.aamod.client.compat.iris
 
 import com.mojang.blaze3d.GpuFormat
 import com.mojang.blaze3d.pipeline.RenderTarget
+import com.mojang.blaze3d.systems.RenderSystem
 import com.nts.aamod.AAMod
 import com.nts.aamod.client.antialiasing.ColorEncoding
 import com.nts.aamod.client.antialiasing.FrameContext
@@ -24,6 +25,7 @@ internal interface IrisAccess {
 
 internal data class IrisState(
     val installed: Boolean = false,
+    val backendInactive: Boolean = false,
     val shaders: Boolean = false,
     val preparing: Boolean = false,
     val shadow: Boolean = false,
@@ -33,6 +35,7 @@ internal data class IrisState(
 
 object IrisCompatibility {
     private var initialized = false
+    private var backend: String? = null
     private var access: IrisAccess? = null
     private var state = IrisState()
     private var revision = 0L
@@ -49,7 +52,7 @@ object IrisCompatibility {
         outputColor = null
         initialize()
         readState()
-        if (!state.installed) return VanillaRenderEnvironment
+        if (!state.installed || state.backendInactive) return VanillaRenderEnvironment
         return IrisEnvironment(state, revision, IrisSettings.policy.get())
     }
 
@@ -73,6 +76,7 @@ object IrisCompatibility {
         val key = when {
             state.error != null -> state.error
             !state.installed -> "aamod.compat.iris.absent"
+            state.backendInactive -> "aamod.compat.iris.backend_inactive"
             state.preparing -> "aamod.compat.iris.preparing"
             !state.shaders -> "aamod.compat.iris.disabled"
             IrisSettings.policy.get() == IrisSettings.AUTOMATIC -> "aamod.compat.iris.automatic"
@@ -83,10 +87,16 @@ object IrisCompatibility {
     }
 
     private fun initialize() {
-        if (initialized) return
+        val currentBackend = RenderSystem.getDevice().deviceInfo.backendName()
+        if (initialized && backend == currentBackend) return
         initialized = true
+        backend = currentBackend
+        access = null
+        state = IrisState()
+        loggedError = false
         val version = PlatformHelper.getModVersion("iris") ?: return
-        state = IrisState(installed = true)
+        state = IrisState(installed = true, backendInactive = currentBackend.equals("Vulkan", ignoreCase = true))
+        if (state.backendInactive) return
         if (version.substringBefore('+') != "1.11.4") {
             state = state.copy(error = "aamod.compat.iris.version")
             AAMod.LOGGER.warn("Iris {} is outside the verified 1.11.4 rendering adapter", version)

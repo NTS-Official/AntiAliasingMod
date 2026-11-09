@@ -25,7 +25,7 @@ codebase builds a Fabric jar and a NeoForge jar.
   with 16 samples. Entity and block-entity models, including animated model parts,
   and baked item/block geometry use per-object motion vectors.
 
-The roadmap has four phases:
+The roadmap has five phases:
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -33,6 +33,7 @@ The roadmap has four phases:
 | Two | Vanilla SSAA and SMAA 1x | Implemented; verification details and limits are recorded in the plan |
 | Three | Iris / Sodium integration | Implemented for the versions and support boundaries below |
 | Four | TAA | Implemented and accepted within the documented scope: reprojection, object motion and five sampling sequences; active Iris shaders pause TAA |
+| Five | Temporal particles, weather and world effects | Designed, not implemented: independent layer histories, effect motion and compatibility with vanilla order-independent transparency; see [the full architecture](docs/TEMPORAL_EFFECTS_PLAN_ZH.md) |
 
 Rendering verification covers vanilla, Sodium, and Iris 1.11.4 with the support
 boundaries below. TAA works without active shader packs; its separate runtime
@@ -86,7 +87,9 @@ failure instead of silently selecting another algorithm. Reload resources or
 change mode to retry. SMAA upstream provenance and license are bundled under
 `assets/aamod/licenses/`.
 
-The current client verification uses OpenGL; Vulkan has not been validated.
+Agent-run client checks use OpenGL. The user has verified AA on native Vulkan
+with both vanilla rendering and Sodium. Iris is inactive on that backend, so
+its optional API is not queried and its shader policies do not block native AA.
 See [the implementation plan and verification record](docs/AA_IMPLEMENTATION_PLAN_ZH.md)
 for stage boundaries and follow-up work.
 
@@ -155,9 +158,12 @@ The shared configuration screen includes **Shader Pack Anti-Aliasing**:
   the pack's jitter, depth and history. Without active shaders, all four algorithms
   work normally, including when Iris is installed.
 
-The adapter supports **Iris 1.11.4**, sRGB output and an RGBA8 main target. Other
-Iris versions, other output color spaces, missing final output, and API failures
-pause this mod's processing with an explicit status. Shadow passes are excluded.
+The OpenGL shader adapter supports **Iris 1.11.4**, sRGB output and an RGBA8 main
+target. On that path, other Iris versions, other output color spaces, missing
+final output, and API failures pause processing with an explicit status.
+On native Vulkan, the mod checks the actual device backend before loading the
+Iris adapter, skips Iris API/version checks and uses the native rendering path.
+An installed but inactive Iris therefore does not block AA. Shadow passes are excluded.
 Shader pack changes and pipeline rebuilds invalidate this mod's resources;
 pipeline preparation also pauses processing to protect first-frame resolution.
 The policy persists as `aamod_iris_policy` (0 = Automatic, 1 = Apply after shaders).

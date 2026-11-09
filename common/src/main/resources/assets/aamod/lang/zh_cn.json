@@ -22,6 +22,7 @@
   "aamod.config.iris.policy.tooltip": "默认：自动。自动策略在 Iris 光影包使用中暂停本模组抗锯齿，不会替光影包开启抗锯齿。光影后叠加仅允许所选的 FXAA / SMAA 在支持的 sRGB / RGBA8 输出上运行，可能重复平滑。不会修改光影包选项。开启光影时 SSAA 和 TAA 暂停；未使用光影时可使用全部已实现模式。",
   "aamod.compat.iris.absent": "Iris：未安装",
   "aamod.compat.iris.disabled": "Iris：光影未使用",
+  "aamod.compat.iris.backend_inactive": "Iris：在 Vulkan 后端下未启用，使用原版渲染路径",
   "aamod.compat.iris.automatic": "Iris 光影使用中：自动策略暂停本模组抗锯齿。",
   "aamod.compat.iris.preparing": "抗锯齿已暂停：Iris 正在准备光影管线。",
   "aamod.compat.iris.overlay": "Iris：光影后 FXAA / SMAA，SSAA / TAA 不可用",
