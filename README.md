@@ -32,7 +32,7 @@ The roadmap has four phases:
 | One | Vanilla FXAA and shared extension points | Implemented; see the verification record for coverage |
 | Two | Vanilla SSAA and SMAA 1x | Implemented; verification details and limits are recorded in the plan |
 | Three | Iris / Sodium integration | Implemented for the versions and support boundaries below |
-| Four | TAA | Implemented: reprojection, history rejection and five sampling sequences; active Iris shaders pause TAA |
+| Four | TAA | Implemented and accepted within the documented scope: reprojection, object motion and five sampling sequences; active Iris shaders pause TAA |
 
 Rendering verification covers vanilla, Sodium, and Iris 1.11.4 with the support
 boundaries below. TAA works without active shader packs; its separate runtime
@@ -126,7 +126,7 @@ animation. A separate motion pass checks world depth and texture alpha before
 TAA consumes its vectors. New, unmatched, translucent and custom captured geometry
 rejects history. FRAPI/Indigo and Sodium extended item/block meshes also receive
 rejection coverage; precise vertex history for those meshes is not implemented.
-ModelPart animation retains precise correspondence with Sodium. Particles and other uncaptured effects retain depth/color
+ModelPart animation retains precise correspondence with Sodium. Particles, weather and other uncaptured effects retain depth/color
 rejection; residual ghosting or loss of accumulation remains possible. Sky pixels
 use the current frame. Held items, HUD, menus and later screen effects are not
 accumulated. TAA does not increase render resolution or combine with SSAA.

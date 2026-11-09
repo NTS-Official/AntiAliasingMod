@@ -59,22 +59,33 @@ void main() {
     vec3 maximumColor = vec3(-1e10);
     vec3 mean = vec3(0.0);
     vec3 squareMean = vec3(0.0);
+    vec3 previousMean = vec3(0.0);
+    vec3 previousSquareMean = vec3(0.0);
+    ivec2 currentPixel = ivec2(currentUv * Size.zw);
+    ivec2 previousPixel = ivec2(previousRawUv * Size.zw);
+    ivec2 maximumPixel = ivec2(Size.zw) - ivec2(1);
     for (int offsetY = -1; offsetY <= 1; offsetY++) {
         for (int offsetX = -1; offsetX <= 1; offsetX++) {
-            vec3 neighbor = toYCoCg(texture(CurrentSampler, currentUv + vec2(offsetX, offsetY) * Size.xy).rgb);
+            ivec2 offset = ivec2(offsetX, offsetY);
+            vec3 neighbor = toYCoCg(texelFetch(CurrentSampler, clamp(currentPixel + offset, ivec2(0), maximumPixel), 0).rgb);
+            vec3 previousNeighbor = toYCoCg(texelFetch(PreviousSampler, clamp(previousPixel + offset, ivec2(0), maximumPixel), 0).rgb);
             minimumColor = min(minimumColor, neighbor);
             maximumColor = max(maximumColor, neighbor);
             mean += neighbor / 9.0;
             squareMean += neighbor * neighbor / 9.0;
+            previousMean += previousNeighbor / 9.0;
+            previousSquareMean += previousNeighbor * previousNeighbor / 9.0;
         }
     }
     vec3 deviation = sqrt(max(squareMean - mean * mean, vec3(0.0)));
+    vec3 previousDeviation = sqrt(max(previousSquareMean - previousMean * previousMean, vec3(0.0)));
     minimumColor = max(minimumColor, mean - 1.25 * deviation);
     maximumColor = min(maximumColor, mean + 1.25 * deviation);
     vec3 history = clamp(toYCoCg(texture(HistorySampler, previousUv).rgb), minimumColor, maximumColor);
     vec3 previousRaw = toYCoCg(texture(PreviousSampler, previousRawUv).rgb);
     vec3 currentColor = toYCoCg(current.rgb);
-    float difference = length(previousRaw - currentColor);
+    vec3 samplingUncertainty = 2.0 * max(deviation, previousDeviation);
+    float difference = length(max(abs(previousRaw - currentColor) - samplingUncertainty, vec3(0.0)));
     float reactive = 1.0 - smoothstep(0.04, 0.15, difference);
     float motion = length((previousUv - texCoord) * Size.zw);
     float weight = Settings.x * reactive * mix(1.0, 0.65, clamp(motion / 16.0, 0.0, 1.0));
