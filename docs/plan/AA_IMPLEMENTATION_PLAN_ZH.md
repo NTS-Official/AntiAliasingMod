@@ -496,7 +496,7 @@ Fabric 测试在固定机位、960×540 下对照 OFF / FXAA，并检查平均�
 
 最后一次受 VSync / 120 FPS 上限影响的采样，FXAA / OFF 各 240 帧平均约 8.429 / 8.440 ms；它只能说明该场景下仍受帧率限制，不能据此宣称 FXAA 无性能开销。GPU 独立耗时和更高分辨率性能基准尚未建立。
 
-本地证据位于忽略的 `../build/phase1-validation`：`fabric-validation-console.log`、`neoforge-validation-console.log`、各独立运行目录内的 `logs/latest.log` 与 `screenshots/`。这些运行证据不是发布资源。
+本地证据位于忽略的 `../../build/phase1-validation`：`fabric-validation-console.log`、`neoforge-validation-console.log`、各独立运行目录内的 `logs/latest.log` 与 `screenshots/`。这些运行证据不是发布资源。
 
 ### 12.4 已知限制与后续验收
 
@@ -525,7 +525,7 @@ Fabric 测试在固定机位、960×540 下对照 OFF / FXAA，并检查平均�
 
 画面对照仅用于确认参数实际影响渲染，动态内容造成的像素差异不能当作画质改善比例。所有行为断言完成；客户端退出仍复现第 12.4 节记录的开发环境 shutdown watchdog，不能将 `runClient` 报告为正常退出。
 
-本地证据位于忽略的 `../build/fxaa-config-validation`：`fabric-console-input-final.log`、`neoforge-console-fixed.log`、两个独立运行目录的 `screenshots/` 与临时验证程序。验证代码和测试世界不打入发布 jar。
+本地证据位于忽略的 `../../build/fxaa-config-validation`：`fabric-console-input-final.log`、`neoforge-console-fixed.log`、两个独立运行目录的 `screenshots/` 与临时验证程序。验证代码和测试世界不打入发布 jar。
 
 ## 13. 第二阶段实现与验收记录
 
@@ -562,7 +562,7 @@ Area 160×560 的原始双字节值映射到 PNG R/G；Search 64×16 的原始�
 
 ### 13.4 原版客户端验收
 
-验证于 2026-11-08，Minecraft 26.2、进程级 JDK 25、OpenGL，未安装 Iris / Sodium。使用临时验证模组与独立世界，代码及世界均位于忽略的 `../build/phase2-validation`，不进入发布 jar。
+验证于 2026-11-08，Minecraft 26.2、进程级 JDK 25、OpenGL，未安装 Iris / Sodium。使用临时验证模组与独立世界，代码及世界均位于忽略的 `../../build/phase2-validation`，不进入发布 jar。
 
 | 检查 | Fabric | NeoForge |
 | --- | --- | --- |
@@ -605,9 +605,9 @@ Fabric 固定机位每档记录 240 帧：OFF 平均 8.643 ms；SSAA 1.5× / 2×
 ### 13.6 证据与限制
 
 - 最终 `:fabric:build :neoforge:build --offline --console=plain` 通过；两个发布 jar 均包含空间算法类、查找纹理、配置资源和 SMAA 许可，未包含临时验证代码。共享 JSON 解析与中英文 36 项翻译键同步检查通过。
-- Fabric 主验收：`../build/phase2-validation/full-fabric.log`，标记 `PHASE_TWO_FABRIC_FULL_VALIDATION_PASSED`。
-- 极佳画质附件补测：`../build/phase2-validation/attachment-audit.log`，标记 `PHASE_TWO_FABRIC_ATTACHMENT_AUDIT_PASSED`。
-- NeoForge 主验收及画面补测：`../build/phase2-validation/neoforge-final.log`，标记 `PHASE_TWO_NEOFORGE_SPATIAL_VALIDATION_PASSED`。
+- Fabric 主验收：`../../build/phase2-validation/full-fabric.log`，标记 `PHASE_TWO_FABRIC_FULL_VALIDATION_PASSED`。
+- 极佳画质附件补测：`../../build/phase2-validation/attachment-audit.log`，标记 `PHASE_TWO_FABRIC_ATTACHMENT_AUDIT_PASSED`。
+- NeoForge 主验收及画面补测：`../../build/phase2-validation/neoforge-final.log`，标记 `PHASE_TWO_NEOFORGE_SPATIAL_VALIDATION_PASSED`。
 - 两个独立运行目录的 `screenshots/` 保存世界、菜单、特效及合成图中间输出；测试程序不打包。
 - 第 12.4 节记录的开发环境 shutdown watchdog 仍存在。行为断言与构建结果分别记录，不将出现 watchdog 的 `runClient` 整体报告为正常退出；NeoForge 测试进程可能残留，需按明确的本项目验证命令行清理。
 - Vulkan、其它设备 / 驱动、GPU 独立计时、实际显存耗尽、长期压力，以及聊天 / 背包 / 受伤画面的扩大人工检查仍未覆盖。第三阶段重新确认 Iris / Sodium 的输入、顺序与各算法支持；第四阶段实现 TAA。
@@ -618,7 +618,7 @@ Fabric 固定机位每档记录 240 帧：OFF 平均 8.643 ms；SSAA 1.5× / 2×
 
 本节记录前次接入 Minecraft 26.2 的 Sodium 0.9.2 与 Iris 1.11.4，覆盖 Fabric 与 NeoForge。当时只完成可选依赖声明、开发运行开关及视频设置入口；后续完成的渲染适配与支持边界见第 15 节。
 
-版本集中在 `../gradle.properties`：`sodium_version=0.9.2`、`iris_version=1.11.4`。开发开关 `enable_sodium` 与 `enable_iris` 默认均为 `false`；按次指定 `-Penable_sodium=true` 加入 Sodium，指定 `-Penable_iris=true` 同时加入 Iris 和其必需的 Sodium，两端行为一致。未启用时保留原版开发运行环境。
+版本集中在 `../../gradle.properties`：`sodium_version=0.9.2`、`iris_version=1.11.4`。开发开关 `enable_sodium` 与 `enable_iris` 默认均为 `false`；按次指定 `-Penable_sodium=true` 加入 Sodium，指定 `-Penable_iris=true` 同时加入 Iris 和其必需的 Sodium，两端行为一致。未启用时保留原版开发运行环境。
 
 - Sodium API：`net.caffeinemc:sodium-fabric-api:0.9.2+mc26.2`，仅编译期引用其与加载器无关的公开配置接口。
 - Sodium 运行时：`net.caffeinemc:sodium-fabric:0.9.2+mc26.2` / `sodium-neoforge:0.9.2+mc26.2`，来自 CaffeineMC 官方 Maven。
@@ -631,6 +631,8 @@ Fabric 固定机位每档记录 240 帧：OFF 平均 8.643 ms；SSAA 1.5× / 2×
 新增 `client/compat/sodium/SodiumConfigEntryPoint.kt`，实现 Sodium 公开 `ConfigEntryPoint`。通过双端元数据的 `sodium:config_api_user` 注册，在 `registerConfigLate` 中给本模组分组添加外部页面：
 
 「选项 → 视频设置 → Anti Aliasing Mod → 抗锯齿」→ 现有 `AntiAliasingConfigScreen(parent)`。
+
+本模组侧栏分组通过公开 `ModOptionsBuilder.setNonTintedIcon` 注册 `aamod:icon.png`，直接复用 `assets/aamod/icon.png`，保留图标原色；由 Sodium 负责布局和缩放，两端使用相同注册入口。
 
 共享页面继续提供模式、FXAA 四项参数、SSAA 倍率和 SMAA 质量；关闭时保存原版选项并返回传入的 Sodium 视频设置页面。不复制参数状态，不注入 Sodium 内部 GUI，不修改 Iris 的光影入口。未安装 Sodium 时保留原版 `qualityOptions` 中的抗锯齿选项；Fabric Mod Menu 与 NeoForge 内置配置入口继续可用，Sodium 入口本身无需 Mod Menu。
 
@@ -648,7 +650,7 @@ API 依据为 Sodium `mc26.2-0.9.2`，提交 `6c26e7b7eded82ce5a1d27f9b147ce5d8d
 
 测试将模式设为 FXAA、子像素混合设为 0.321、搜索步数设为 3，关闭后重新加载 `options.txt` 并断言值保留。Sodium 外部页面在每次返回与再次打开后均恰好注册一次。960×640、GUI 倍率 2 的截图检查覆盖双端 Sodium 页面、Iris 同装页面、共享参数页及返回结果。
 
-证据保存在忽略的 `../build/compat-ui-validation`：
+证据保存在忽略的 `../../build/compat-ui-validation`：
 
 - `fabric-vanilla.log`、`fabric-sodium.log`、`fabric-iris.log`：`FABRIC_OPTIONAL_UI_PASSED combination=vanilla|sodium|iris`。
 - `neo-vanilla.log`、`neo-sodium.log`、`neo-iris.log`：`NEOFORGE_OPTIONAL_UI_PASSED combination=vanilla|sodium|iris`。
@@ -692,7 +694,7 @@ SSAA 的限制来自附件所有权与分辨率生命周期：现有原版路径
 
 验证日期 2026-11-08，Minecraft 26.2，Fabric Loader 0.19.5 / Fabric API 0.161.0+26.2，NeoForge 26.2.0.82，Sodium 0.9.2，Iris 1.11.4，Windows OpenGL，进程级 JDK 25；系统默认 JDK 27 未修改。
 
-真实光影包为 Modrinth 官方发布的 **Complementary Reimagined r5.9.3**，版本 ID `Bqen1mJX`，下载后核验官方 SHA512。测试世界包含黑白斜边、树叶、玻璃、栅栏与手持钻石剑。临时验证代码、世界、光影包和截图均位于忽略的 `../build/iris-validation`，不进入发布 jar。
+真实光影包为 Modrinth 官方发布的 **Complementary Reimagined r5.9.3**，版本 ID `Bqen1mJX`，下载后核验官方 SHA512。测试世界包含黑白斜边、树叶、玻璃、栅栏与手持钻石剑。临时验证代码、世界、光影包和截图均位于忽略的 `../../build/iris-validation`，不进入发布 jar。
 
 临时 mixin 在同一帧最终颜色处理前后分别下载 GPU 图像，检查实际像素差和 RGB 总和，避免把状态标记当作图像效果证据。自动策略要求像素完全不变，叠加要求非零过滤结果，并限制整体亮度偏移；另外保存含 HUD 的画面检查菜单、手持物品及透明内容。SMAA 四档分别运行，SSAA 无光影时核对世界附件尺寸 1200×900 / 1600×1200 / 2400×1800 / 3200×2400，输出保持 800×600。
 
@@ -718,7 +720,7 @@ NeoForge 开发条件下，Iris 的顶点格式数组替换返回单元素数组
 
 ### 15.6 最终交付检查
 
-`JDK 25 + ./gradlew.bat :fabric:build :neoforge:build --offline --console=plain` 最终通过，日志为 `../build/iris-validation/final-build.log`。发布产物仍为 `fabric/build/libs/aamod-fabric-0.1.0-alpha.jar` 与 `neoforge/build/libs/aamod-neoforge-0.1.0-alpha.jar`。
+`JDK 25 + ./gradlew.bat :fabric:build :neoforge:build --offline --console=plain` 最终通过，日志为 `../../build/iris-validation/final-build.log`。发布产物仍为 `fabric/build/libs/aamod-fabric-0.1.0-alpha.jar` 与 `neoforge/build/libs/aamod-neoforge-0.1.0-alpha.jar`。
 
 两个 jar 均包含 Iris 适配器、可选管线 hook、策略配置及 Sodium 配置入口，未内置 `net/irisshaders/`、`net/caffeinemc/` 或临时验证类。元数据无未展开占位符；发布字节码中的 `PlatformHelper.getModVersion` 分别转调 Fabric / NeoForge 平台实现。共享配置及 mixin JSON 检查通过，中英文 53 项翻译键一致，`git diff --check` 通过。
 
@@ -825,7 +827,7 @@ NeoForge 光影验收仅使用加载器属性 `neoforge.disableGlValidation=true
 
 ### 16.5 最终构建与发布包检查
 
-使用进程内 JDK 25 执行 `./gradlew.bat :fabric:build :neoforge:build --offline --console=plain`，双端 `BUILD SUCCESSFUL`。最终包为 `../fabric/build/libs/aamod-fabric-0.3.1-alpha+mc26.2.jar` 和 `neoforge/build/libs/aamod-neoforge-0.3.1-alpha+mc26.2.jar`，保留本次工作区的版本设置。
+使用进程内 JDK 25 执行 `./gradlew.bat :fabric:build :neoforge:build --offline --console=plain`，双端 `BUILD SUCCESSFUL`。最终包为 `../../fabric/build/libs/aamod-fabric-0.3.1-alpha+mc26.2.jar` 和 `neoforge/build/libs/aamod-neoforge-0.3.1-alpha+mc26.2.jar`，保留本次工作区的版本设置。
 
 包内确认 `client/antialiasing/taa/` 类、`TemporalSettings`、`CameraMixin`、TAA vertex / fragment shader 和图标齐全；不存在旧 `client/taa/` 类、Iris / Sodium 实现或临时验证类。TAA 字节码为 Java 25（major 69），元数据无未展开占位符，66 个中英文翻译键一致，`git diff --check` 通过。构建生成的 IDE 配置噪声已清理。
 
@@ -857,7 +859,7 @@ Fabric + Sodium 实际运行通过原生 F3 条目、三态显示、独立配置
 
 2026-11-09 用户明确确认：「已通过观察确认除去未接入的粒子和天气外，已接入部分的视效正常」。据此补齐时域采样方案第 9 节第 6 项的用户验收，结合双端工程、GPU 及生命周期检查，第四阶段在第 16.1／16.2 节和逐物体运动向量方案声明的支持范围内完成。粒子、天气及其它未接入路径没有因此获得精确运动向量支持；Iris 光影开启时 TAA 暂停、手持物品与 GUI 不进入历史等边界保持不变。
 
-静止抖动修复和双端实际回归见 [时域采样方案](TEMPORAL_SAMPLING_PLAN_ZH.md) 第 13 节。最终使用 JDK 25 按工作区版本 `0.4.1-alpha+mc26.2` 重新构建两端发布包，`phase4-acceptance-build.log` 为 `BUILD SUCCESSFUL`，产物为 `../fabric/build/libs/aamod-fabric-0.4.1-alpha+mc26.2.jar` 和 `../neoforge/build/libs/aamod-neoforge-0.4.1-alpha+mc26.2.jar`。包内 TAA／运动类与已运行验证版本一致，shader 与当前源码一致，版本、Java 25 字节码、69 个翻译键、图标和无验证类／无内置可选依赖检查通过；完整证据见时域采样方案第 14 节。
+静止抖动修复和双端实际回归见 [时域采样方案](TEMPORAL_SAMPLING_PLAN_ZH.md) 第 13 节。最终使用 JDK 25 按工作区版本 `0.4.1-alpha+mc26.2` 重新构建两端发布包，`phase4-acceptance-build.log` 为 `BUILD SUCCESSFUL`，产物为 `../../fabric/build/libs/aamod-fabric-0.4.1-alpha+mc26.2.jar` 和 `../neoforge/build/libs/aamod-neoforge-0.4.1-alpha+mc26.2.jar`。包内 TAA／运动类与已运行验证版本一致，shader 与当前源码一致，版本、Java 25 字节码、69 个翻译键、图标和无验证类／无内置可选依赖检查通过；完整证据见时域采样方案第 14 节。
 
 ## 17. 第五阶段：粒子、天气与世界透明效果
 

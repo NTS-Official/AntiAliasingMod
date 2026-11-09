@@ -101,7 +101,7 @@ from the repository root. On PowerShell use `./gradlew.bat`; on Linux/macOS use
 The machine default is JDK 27. Actual Gradle script configuration under JDK 27
 fails with `Unsupported class file major version 71`; use process-local JAVA_HOME
 for JDK 25 without changing the system default. Keep Java and Kotlin API/bytecode
-targets at 25. See `docs/AA_IMPLEMENTATION_PLAN_ZH.md` for the verification record.
+targets at 25. See `docs/plan` for the verification record.
 
 | Command (PowerShell) | Purpose |
 | --- | --- |

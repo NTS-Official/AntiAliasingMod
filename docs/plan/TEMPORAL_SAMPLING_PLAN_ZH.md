@@ -82,7 +82,7 @@ Rank-1 的优点是实现小、CPU 成本低、可以不依赖固定点表。缺
 
 ## 5. 代码结构草案
 
-将采样器放在 `../common/src/main/kotlin/com/nts/aamod/client/antialiasing/taa`，不引入 Fabric 或 NeoForge 类型。
+将采样器放在 `../../common/src/main/kotlin/com/nts/aamod/client/antialiasing/taa`，不引入 Fabric 或 NeoForge 类型。
 
 建议拆成以下职责：
 
@@ -346,7 +346,7 @@ Fabric + Sodium 运行检查输出 `TAA_F3_NATIVE_TRISTATE_PERSISTENCE_OPTIONS_P
 
 `TAA_JITTER_REJECTION_GUARD_PASSED` 另覆盖有效历史混合、动态无效标记、错误深度、越界、整片变色、局部突现、恒色与 alpha 保持。真实 Blaze3D 管线在双端 Iris／Sodium、光影关闭的独立客户端回归：`fabric-regression.log` 与 `neo-regression.log` 正常成功退出，12 项运动 GPU、四项实际解析消费、真实 ModelPart／共享拥有者、未匹配扩展网格拒绝、预算和世界捕获检查通过。
 
-双端发布构建通过（`build.log`）。运行中的开发客户端持有 common 开发 jar，因此通过临时 `isolated-archives.init.gradle` 将归档生成到独立临时目录；核对包内 shader 与源码一致、没有验证类或内置 Iris／Sodium 后，将最终两端发布 jar 更新至常规 `fabric/build/libs`／`neoforge/build/libs`。版本仍为 `0.3.1-alpha+mc26.2`。没有关闭、重启、重载或切换玩家客户端，运行中进程不自动加载新修复。
+双端发布构建通过（`build.log`）。运行中的开发客户端持有 common 开发 jar，因此通过临时 `isolated-archives.init.gradle` 将归档生成到独立临时目录；核对包内 shader 与源码一致、没有验证类或内置 Iris／Sodium 后，将最终两端发布 jar 更新至常规 `../../fabric/build/libs`／`neoforge/build/libs`。版本仍为 `0.3.1-alpha+mc26.2`。没有关闭、重启、重载或切换玩家客户端，运行中进程不自动加载新修复。
 
 这些数据证明已重现并减轻采样误拒绝，仍存在有限的残余采样波动，工程数据本身不能推断用户世界的画质已可接受。修复后的用户观察结论及最终交付见第 14 节。
 
@@ -360,7 +360,7 @@ Fabric + Sodium 运行检查输出 `TAA_F3_NATIVE_TRISTATE_PERSISTENCE_OPTIONS_P
 
 | 加载器 | 发布包 | 大小 |
 | --- | --- | --- |
-| Fabric | `../fabric/build/libs/aamod-fabric-0.4.1-alpha+mc26.2.jar` | 1,351,651 字节 |
-| NeoForge | `../neoforge/build/libs/aamod-neoforge-0.4.1-alpha+mc26.2.jar` | 1,353,025 字节 |
+| Fabric | `../../fabric/build/libs/aamod-fabric-0.4.1-alpha+mc26.2.jar` | 1,351,651 字节 |
+| NeoForge | `../../neoforge/build/libs/aamod-neoforge-0.4.1-alpha+mc26.2.jar` | 1,353,025 字节 |
 
 `%TEMP%/aamod-taa-jitter/phase4-acceptance-artifacts.log` 记录两包的 SHA-256 和 `AA_PHASE4_ARTIFACT_VERIFIED`。两端各 41 个 TAA／运动 mixin 类与已运行验证的 `0.3.1-alpha+mc26.2` 包逐字节一致，字节码 major 69；五个 TAA shader 和两份语言资源与当前源码一致，包含静止抖动修复，69 个翻译键一致，元数据版本与图标路径正确，无未展开占位符、临时验证类或内置 Iris／Sodium 实现。此前运行和 GPU 结果按原日志保留，本次重新构建及包检查没有冒充新增客户端运行检查。

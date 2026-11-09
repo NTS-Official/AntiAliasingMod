@@ -33,7 +33,7 @@ The roadmap has five phases:
 | Two | Vanilla SSAA and SMAA 1x | Implemented; verification details and limits are recorded in the plan |
 | Three | Iris / Sodium integration | Implemented for the versions and support boundaries below |
 | Four | TAA | Implemented and accepted within the documented scope: reprojection, object motion and five sampling sequences; active Iris shaders pause TAA |
-| Five | Temporal particles, weather and world effects | Designed, not implemented: independent layer histories, effect motion and compatibility with vanilla order-independent transparency; see [the full architecture](docs/TEMPORAL_EFFECTS_PLAN_ZH.md) |
+| Five | Temporal particles, weather and world effects | Designed, not implemented: independent layer histories, effect motion and compatibility with vanilla order-independent transparency; see [the full architecture](docs/plan/TEMPORAL_EFFECTS_PLAN_ZH.md) |
 
 Rendering verification covers vanilla, Sodium, and Iris 1.11.4 with the support
 boundaries below. TAA works without active shader packs; its separate runtime
@@ -90,7 +90,7 @@ change mode to retry. SMAA upstream provenance and license are bundled under
 Agent-run client checks use OpenGL. The user has verified AA on native Vulkan
 with both vanilla rendering and Sodium. Iris is inactive on that backend, so
 its optional API is not queried and its shader policies do not block native AA.
-See [the implementation plan and verification record](docs/AA_IMPLEMENTATION_PLAN_ZH.md)
+See [the implementation plan and verification record](docs/plan/AA_IMPLEMENTATION_PLAN_ZH.md)
 for stage boundaries and follow-up work.
 
 ### TAA configuration and limits
@@ -137,7 +137,7 @@ History and the RGBA32F motion texture cost 44 bytes per output pixel, about
 87.0 MiB at 1080p and 348.0 MiB at 4K, excluding driver overhead and vertex/uniform/query
 buffers. Capture is limited to 262,144 vertices and 8,192 batches per frame;
 exceeding either budget disables history blending for that frame.
-See [the motion-vector implementation plan](docs/OBJECT_MOTION_VECTORS_PLAN_ZH.md) for
+See [the motion-vector implementation plan](docs/plan/OBJECT_MOTION_VECTORS_PLAN_ZH.md) for
 the reference revision, coverage and validation evidence.
 
 ### Iris shader compatibility

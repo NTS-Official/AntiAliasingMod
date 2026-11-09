@@ -6,7 +6,7 @@
 
 ## 1. 参考依据
 
-- 本地参考：`../../mod_references/superresolution`。
+- 本地参考：`../../../mod_references/superresolution`。
 - 上游：<https://github.com/IReallyWantToSleep/superresolution>。
 - 核对版本：`ede68fac7f7e18255a8caa1a33763b61f5c9b0ea`。
 - 参考目录：`modules/common/src/iris_velocity_ext/java/io/homo/superresolution/iris_velocity_ext/v26_2/`。

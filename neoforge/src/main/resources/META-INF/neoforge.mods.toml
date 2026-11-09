@@ -9,6 +9,7 @@ displayName = "${mod_name}"
 authors = "${mod_author}"
 description = '''A Mod that aims at implementing antialiasing features to Minecraft.'''
 iconFile = "assets/aamod/icon.png"
+bannerFile = "assets/aamod/icon.png"
 
 [modproperties.${mod_id}]
 "sodium:config_api_user" = "${mod_group}.client.compat.sodium.SodiumConfigEntryPoint"
