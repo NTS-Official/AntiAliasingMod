@@ -133,6 +133,7 @@ object IrisCompatibility {
                 !snapshot.shaders -> null
                 policy == IrisSettings.AUTOMATIC -> "aamod.compat.iris.automatic"
                 mode == VideoAntiAliasingSettings.SSAA -> "aamod.compat.iris.ssaa"
+                mode == VideoAntiAliasingSettings.TAA -> "aamod.compat.iris.taa"
                 !snapshot.displayColor -> "aamod.compat.iris.color"
                 else -> null
             }

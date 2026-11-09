@@ -21,6 +21,21 @@ class CameraSnapshot(
     fun projection(destination: Matrix4f): Matrix4f = destination.set(projectionMatrix)
 
     fun view(destination: Matrix4f): Matrix4f = destination.set(viewMatrix)
+
+    companion object {
+        fun capture(projection: Matrix4fc, view: Matrix4fc, position: Vec3): CameraSnapshot? {
+            if (!isUsable(projection) || !isUsable(view) ||
+                !position.x.isFinite() || !position.y.isFinite() || !position.z.isFinite()
+            ) return null
+            return CameraSnapshot(projection, view, position)
+        }
+
+        fun isUsable(matrix: Matrix4fc): Boolean {
+            if (!matrix.isFinite) return false
+            val determinant = matrix.determinant()
+            return determinant.isFinite() && determinant != 0f
+        }
+    }
 }
 
 data class FrameContext(

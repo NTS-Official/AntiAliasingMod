@@ -5,6 +5,7 @@ import com.nts.aamod.client.option.SpatialSettings
 import com.nts.aamod.client.option.IrisSettings
 import com.nts.aamod.client.compat.iris.IrisCompatibility
 import com.nts.aamod.client.option.VideoAntiAliasingSettings
+import com.nts.aamod.client.option.TemporalSettings
 import com.nts.aamod.platform.PlatformHelper
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.components.StringWidget
@@ -45,6 +46,10 @@ class AntiAliasingConfigScreen(parent: Screen) : OptionsSubScreen(
             optionList.addOption(SpatialSettings.ssaaScale, SpatialSettings.DEFAULT_SSAA_SCALE)
             optionList.addHeader(Component.translatable("aamod.config.smaa"))
             optionList.addOption(SpatialSettings.smaaQuality, SpatialSettings.DEFAULT_SMAA_QUALITY)
+            optionList.addHeader(Component.translatable("aamod.config.taa"))
+            optionList.addOption(TemporalSettings.sequence, TemporalSettings.DEFAULT_SEQUENCE)
+            optionList.addOption(TemporalSettings.samples, TemporalSettings.DEFAULT_SAMPLES)
+            optionList.addOption(TemporalSettings.sharpness, TemporalSettings.DEFAULT_SHARPNESS)
         }
     }
 

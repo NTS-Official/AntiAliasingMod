@@ -2,9 +2,9 @@
 
 ## 1. 文档状态与阶段划分
 
-本文档整理设计、前两阶段实现和实际验证记录。第一阶段原始设计保留为历史基线；具体落地和测试覆盖见第 12、13 节。
+本文档整理设计、四阶段实现和实际验证记录。第一阶段原始设计保留为历史基线；具体落地和测试覆盖见第 12–16 节。
 
-当前状态：第一阶段原版 FXAA、第二阶段原版 SSAA / SMAA 1x 与参数配置已实现；第三阶段已完成指定版本与支持边界内的 Iris / Sodium 适配，光影开启时支持手动叠加 FXAA / SMAA，SSAA 明确暂停；第四阶段 TAA 待实现。三个渲染阶段、分辨率管理和兼容提供者继续作为扩展边界。实际验证范围和环境限制按第 12、13、14、15 节分别报告。
+当前状态：第一阶段原版 FXAA、第二阶段原版 SSAA / SMAA 1x 与参数配置已实现；第三阶段已完成指定版本与支持边界内的 Iris / Sodium 适配；第四阶段已实现传统 TAA 与五种采样序列。开启光影时支持手动叠加 FXAA / SMAA，SSAA / TAA 明确暂停。三个渲染阶段、分辨率管理和兼容提供者继续作为扩展边界。实际验证范围和环境限制按第 12–16 节分别报告，早期阶段文字保留当时的实现状态。
 
 | 阶段 | 目标 | 交付边界 |
 | --- | --- | --- |
@@ -18,7 +18,7 @@
 ## 2. 实施前基线与工程约束
 
 - Minecraft 版本为 26.2，工程使用 Architectury，包含 `common`、`fabric`、`neoforge` 三个模块。
-- 实施前抗锯齿选项已有 `OFF=0`、`FXAA=1`、`SMAA=2`、`TAA=3`，均为占位；现在 FXAA / SSAA / SMAA 1x 具备实际渲染实现，旧编号保留，追加 `SSAA=4`。
+- 实施前抗锯齿选项已有 `OFF=0`、`FXAA=1`、`SMAA=2`、`TAA=3`，均为占位；现在 FXAA / SSAA / SMAA 1x / TAA 具备实际渲染实现，旧编号保留，追加 `SSAA=4`。
 - 核心实现及客户端 mixin 使用 Kotlin，接入原版调用点。
 - 渲染使用 Blaze3D 抽象，不直接调用 OpenGL。
 - 保留 `dev.architectury.loom-no-remap`、现有共享代码打包方式及关闭 Gradle configuration cache 的配置。
@@ -219,7 +219,7 @@ FXAA 收到通知时只处理自己实际拥有的资源。后续 TAA 可据此�
 
 ### 5.5 与已有 TAA 方案的关系
 
-第四阶段 TAA 采样器与历史设计参见 [TEMPORAL_SAMPLING_PLAN_ZH.md](TEMPORAL_SAMPLING_PLAN_ZH.md)。该文档是后续设计资料，不能据其中的描述推断仓库已经有可用的 TAA、Halton 或历史重投影实现。
+第四阶段 TAA 采样器与历史设计参见 [TEMPORAL_SAMPLING_PLAN_ZH.md](TEMPORAL_SAMPLING_PLAN_ZH.md)。第一阶段时该文档仅为后续设计资料；现在已实现，实际职责、采样检查和历史重投影验证分别记录在该文档第 11 节及本文第 16 节。
 
 本阶段的预留应容纳采样序列、jitter controller 和历史失效机制；具体实现、默认参数和时域画质验收留待第四阶段。
 
@@ -492,7 +492,7 @@ Fabric 测试在固定机位、960×540 下对照 OFF / FXAA，并检查平均�
 
 最后一次受 VSync / 120 FPS 上限影响的采样，FXAA / OFF 各 240 帧平均约 8.429 / 8.440 ms；它只能说明该场景下仍受帧率限制，不能据此宣称 FXAA 无性能开销。GPU 独立耗时和更高分辨率性能基准尚未建立。
 
-本地证据位于忽略的 `build/phase1-validation/`：`fabric-validation-console.log`、`neoforge-validation-console.log`、各独立运行目录内的 `logs/latest.log` 与 `screenshots/`。这些运行证据不是发布资源。
+本地证据位于忽略的 `../build/phase1-validation`：`fabric-validation-console.log`、`neoforge-validation-console.log`、各独立运行目录内的 `logs/latest.log` 与 `screenshots/`。这些运行证据不是发布资源。
 
 ### 12.4 已知限制与后续验收
 
@@ -521,7 +521,7 @@ Fabric 测试在固定机位、960×540 下对照 OFF / FXAA，并检查平均�
 
 画面对照仅用于确认参数实际影响渲染，动态内容造成的像素差异不能当作画质改善比例。所有行为断言完成；客户端退出仍复现第 12.4 节记录的开发环境 shutdown watchdog，不能将 `runClient` 报告为正常退出。
 
-本地证据位于忽略的 `build/fxaa-config-validation/`：`fabric-console-input-final.log`、`neoforge-console-fixed.log`、两个独立运行目录的 `screenshots/` 与临时验证程序。验证代码和测试世界不打入发布 jar。
+本地证据位于忽略的 `../build/fxaa-config-validation`：`fabric-console-input-final.log`、`neoforge-console-fixed.log`、两个独立运行目录的 `screenshots/` 与临时验证程序。验证代码和测试世界不打入发布 jar。
 
 ## 13. 第二阶段实现与验收记录
 
@@ -558,7 +558,7 @@ Area 160×560 的原始双字节值映射到 PNG R/G；Search 64×16 的原始�
 
 ### 13.4 原版客户端验收
 
-验证于 2026-11-08，Minecraft 26.2、进程级 JDK 25、OpenGL，未安装 Iris / Sodium。使用临时验证模组与独立世界，代码及世界均位于忽略的 `build/phase2-validation/`，不进入发布 jar。
+验证于 2026-11-08，Minecraft 26.2、进程级 JDK 25、OpenGL，未安装 Iris / Sodium。使用临时验证模组与独立世界，代码及世界均位于忽略的 `../build/phase2-validation`，不进入发布 jar。
 
 | 检查 | Fabric | NeoForge |
 | --- | --- | --- |
@@ -601,9 +601,9 @@ Fabric 固定机位每档记录 240 帧：OFF 平均 8.643 ms；SSAA 1.5× / 2×
 ### 13.6 证据与限制
 
 - 最终 `:fabric:build :neoforge:build --offline --console=plain` 通过；两个发布 jar 均包含空间算法类、查找纹理、配置资源和 SMAA 许可，未包含临时验证代码。共享 JSON 解析与中英文 36 项翻译键同步检查通过。
-- Fabric 主验收：`build/phase2-validation/full-fabric.log`，标记 `PHASE_TWO_FABRIC_FULL_VALIDATION_PASSED`。
-- 极佳画质附件补测：`build/phase2-validation/attachment-audit.log`，标记 `PHASE_TWO_FABRIC_ATTACHMENT_AUDIT_PASSED`。
-- NeoForge 主验收及画面补测：`build/phase2-validation/neoforge-final.log`，标记 `PHASE_TWO_NEOFORGE_SPATIAL_VALIDATION_PASSED`。
+- Fabric 主验收：`../build/phase2-validation/full-fabric.log`，标记 `PHASE_TWO_FABRIC_FULL_VALIDATION_PASSED`。
+- 极佳画质附件补测：`../build/phase2-validation/attachment-audit.log`，标记 `PHASE_TWO_FABRIC_ATTACHMENT_AUDIT_PASSED`。
+- NeoForge 主验收及画面补测：`../build/phase2-validation/neoforge-final.log`，标记 `PHASE_TWO_NEOFORGE_SPATIAL_VALIDATION_PASSED`。
 - 两个独立运行目录的 `screenshots/` 保存世界、菜单、特效及合成图中间输出；测试程序不打包。
 - 第 12.4 节记录的开发环境 shutdown watchdog 仍存在。行为断言与构建结果分别记录，不将出现 watchdog 的 `runClient` 整体报告为正常退出；NeoForge 测试进程可能残留，需按明确的本项目验证命令行清理。
 - Vulkan、其它设备 / 驱动、GPU 独立计时、实际显存耗尽、长期压力，以及聊天 / 背包 / 受伤画面的扩大人工检查仍未覆盖。第三阶段重新确认 Iris / Sodium 的输入、顺序与各算法支持；第四阶段实现 TAA。
@@ -614,7 +614,7 @@ Fabric 固定机位每档记录 240 帧：OFF 平均 8.643 ms；SSAA 1.5× / 2×
 
 本节记录前次接入 Minecraft 26.2 的 Sodium 0.9.2 与 Iris 1.11.4，覆盖 Fabric 与 NeoForge。当时只完成可选依赖声明、开发运行开关及视频设置入口；后续完成的渲染适配与支持边界见第 15 节。
 
-版本集中在 `gradle.properties`：`sodium_version=0.9.2`、`iris_version=1.11.4`。开发开关 `enable_sodium` 与 `enable_iris` 默认均为 `false`；按次指定 `-Penable_sodium=true` 加入 Sodium，指定 `-Penable_iris=true` 同时加入 Iris 和其必需的 Sodium，两端行为一致。未启用时保留原版开发运行环境。
+版本集中在 `../gradle.properties`：`sodium_version=0.9.2`、`iris_version=1.11.4`。开发开关 `enable_sodium` 与 `enable_iris` 默认均为 `false`；按次指定 `-Penable_sodium=true` 加入 Sodium，指定 `-Penable_iris=true` 同时加入 Iris 和其必需的 Sodium，两端行为一致。未启用时保留原版开发运行环境。
 
 - Sodium API：`net.caffeinemc:sodium-fabric-api:0.9.2+mc26.2`，仅编译期引用其与加载器无关的公开配置接口。
 - Sodium 运行时：`net.caffeinemc:sodium-fabric:0.9.2+mc26.2` / `sodium-neoforge:0.9.2+mc26.2`，来自 CaffeineMC 官方 Maven。
@@ -644,7 +644,7 @@ API 依据为 Sodium `mc26.2-0.9.2`，提交 `6c26e7b7eded82ce5a1d27f9b147ce5d8d
 
 测试将模式设为 FXAA、子像素混合设为 0.321、搜索步数设为 3，关闭后重新加载 `options.txt` 并断言值保留。Sodium 外部页面在每次返回与再次打开后均恰好注册一次。960×640、GUI 倍率 2 的截图检查覆盖双端 Sodium 页面、Iris 同装页面、共享参数页及返回结果。
 
-证据保存在忽略的 `build/compat-ui-validation/`：
+证据保存在忽略的 `../build/compat-ui-validation`：
 
 - `fabric-vanilla.log`、`fabric-sodium.log`、`fabric-iris.log`：`FABRIC_OPTIONAL_UI_PASSED combination=vanilla|sodium|iris`。
 - `neo-vanilla.log`、`neo-sodium.log`、`neo-iris.log`：`NEOFORGE_OPTIONAL_UI_PASSED combination=vanilla|sodium|iris`。
@@ -688,7 +688,7 @@ SSAA 的限制来自附件所有权与分辨率生命周期：现有原版路径
 
 验证日期 2026-11-08，Minecraft 26.2，Fabric Loader 0.19.5 / Fabric API 0.161.0+26.2，NeoForge 26.2.0.82，Sodium 0.9.2，Iris 1.11.4，Windows OpenGL，进程级 JDK 25；系统默认 JDK 27 未修改。
 
-真实光影包为 Modrinth 官方发布的 **Complementary Reimagined r5.9.3**，版本 ID `Bqen1mJX`，下载后核验官方 SHA512。测试世界包含黑白斜边、树叶、玻璃、栅栏与手持钻石剑。临时验证代码、世界、光影包和截图均位于忽略的 `build/iris-validation/`，不进入发布 jar。
+真实光影包为 Modrinth 官方发布的 **Complementary Reimagined r5.9.3**，版本 ID `Bqen1mJX`，下载后核验官方 SHA512。测试世界包含黑白斜边、树叶、玻璃、栅栏与手持钻石剑。临时验证代码、世界、光影包和截图均位于忽略的 `../build/iris-validation`，不进入发布 jar。
 
 临时 mixin 在同一帧最终颜色处理前后分别下载 GPU 图像，检查实际像素差和 RGB 总和，避免把状态标记当作图像效果证据。自动策略要求像素完全不变，叠加要求非零过滤结果，并限制整体亮度偏移；另外保存含 HUD 的画面检查菜单、手持物品及透明内容。SMAA 四档分别运行，SSAA 无光影时核对世界附件尺寸 1200×900 / 1600×1200 / 2400×1800 / 3200×2400，输出保持 800×600。
 
@@ -714,7 +714,7 @@ NeoForge 开发条件下，Iris 的顶点格式数组替换返回单元素数组
 
 ### 15.6 最终交付检查
 
-`JDK 25 + ./gradlew.bat :fabric:build :neoforge:build --offline --console=plain` 最终通过，日志为 `build/iris-validation/final-build.log`。发布产物仍为 `fabric/build/libs/aamod-fabric-0.1.0-alpha.jar` 与 `neoforge/build/libs/aamod-neoforge-0.1.0-alpha.jar`。
+`JDK 25 + ./gradlew.bat :fabric:build :neoforge:build --offline --console=plain` 最终通过，日志为 `../build/iris-validation/final-build.log`。发布产物仍为 `fabric/build/libs/aamod-fabric-0.1.0-alpha.jar` 与 `neoforge/build/libs/aamod-neoforge-0.1.0-alpha.jar`。
 
 两个 jar 均包含 Iris 适配器、可选管线 hook、策略配置及 Sodium 配置入口，未内置 `net/irisshaders/`、`net/caffeinemc/` 或临时验证类。元数据无未展开占位符；发布字节码中的 `PlatformHelper.getModVersion` 分别转调 Fabric / NeoForge 平台实现。共享配置及 mixin JSON 检查通过，中英文 53 项翻译键一致，`git diff --check` 通过。
 
@@ -727,3 +727,112 @@ NeoForge 开发条件下，Iris 的顶点格式数组替换返回单元素数组
 | 光影自身 AA、切包 / 重载 / resize、首帧及重进世界 | 双端完整矩阵与首次管线 / 重进世界标记，关闭后的资源释放与有界管线数量 |
 
 在上述已声明范围内完成第三阶段；保留第 15.5 节环境限制与未支持组合，后续第四阶段单独实现和验证 TAA。
+
+## 16. 第四阶段 TAA 落地与验收
+
+### 16.1 实际数据流和算法边界
+
+`TaaMethod` 注册为模式 3，使用原有 `FRAME_PREPARE → WORLD_RESOLVE` 调度。准备阶段读取序列 / 周期，统一重置历史；相机提取时生成一次 jitter，实际世界投影提交时注入 `2*jitter/(width,height)` 的 clip translation，并记录实际投影。传送导致提取与绘制之间失效时允许补做一次准备，避免错误使用旧矩阵。
+
+世界剔除投影保持稳定，仅扩大一像素边缘裕量；不抖动 GUI、手持物品、剔除矩阵或相机自身的屏幕投影。解析通过 `LevelRenderer.addAlwaysOnTopPass` 之前的 framegraph pass 执行，此时主世界颜色和深度尚有效；always-on-top、手持物品及之后的原版后处理不进入 TAA 历史。
+
+历史使用两个 RGBA16F + D32 目标，并保留上一帧原始 RGBA8 颜色。每帧只从旧历史读取、向另一目标写入，再复制当前原始深度和颜色、把解析结果写回主世界目标；没有同纹理读写反馈。解析／输出为两个原生 Blaze3D `RenderPipeline`，新增逐物体运动向量另使用两个固定的剔除／双面管线，不使用直接 OpenGL 调用。
+
+相机重投影使用 `previousProjection * previousViewRotation * translate(currentPos-previousPos) * inverse(currentProjection * currentViewRotation)`；前后矩阵包含实际摇晃 / 屏幕投影效果及对应 jitter。解析在当前 / 历史纹理采样时校正 jitter，拒绝背向、越界和深度不一致的历史；3×3 YCoCg 范围及 1.25σ 约束限制历史，原始前后帧颜色变化产生 reactive rejection，运动进一步降低历史权重，最高权重为 0.94。天空深度为 0 时只使用当前帧。
+
+静态场景使用相机重投影；追加的逐物体运动矢量覆盖实体／方块实体模型部件动画与原版烘焙物品／方块几何。已捕获但无法匹配、新出现、半透明及自定义几何拒绝历史；FRAPI／Indigo 和 Sodium 扩展物品／方块网格当前也只提供拒绝覆盖，Sodium 下的 ModelPart 动画仍有精确对应。粒子等未接入路径仍使用深度／颜色拒绝与邻域约束，不能保证完全无拖影。运动纹理在解析前完成可见性／透明裁剪检查，数据定义和验证见 `OBJECT_MOTION_VECTORS_PLAN_ZH.md`。手持物品独立绘制，不提供它们的时域抗锯齿。没有时域升采样、TAA + SSAA 或光影内部历史协作。
+
+### 16.2 参数、重置和兼容策略
+
+五种序列与 8 / 16 / 32 样本共 15 个合法组合，默认 Halton + 16；细节、原创点表及频谱 / 前缀检查见 `TEMPORAL_SAMPLING_PLAN_ZH.md` 第 11 节。
+
+`TemporalSettings` 经原版 Options 持久化；原版视频设置画质分组与共享配置页均提供两个控件，配置页有独立自动隐藏的重置按钮。顶部模式没有重置按钮。无重置时参数自身居中，有按钮时整体居中。Fast → FXAA、Fancy → SMAA、Fabulous → TAA；手动切换模式回到 Custom。
+
+模式、序列、样本数、世界 / 维度、相机实体 / 视角、camera cut、FOV / 基础投影、尺寸、目标格式、资源重载和外部管线变化使旧历史失效。相机位置跳跃超过 8 方块或视角矩阵突变时作为 cut 处理；正常移动保持重投影，帧中断后重新初始化。OFF、退出世界或销毁时关闭所有自有目标、uniform ring 和 query pool。
+
+| 运行组合 | TAA 行为 |
+| --- | --- |
+| 无 Iris 的原版 / Sodium | 运行，15 个采样组合共用同一解析逻辑 |
+| Iris 1.11.4 安装、光影关闭 | 运行，含 Sodium 渲染和设置入口 |
+| Iris 光影开启、自动策略 | 暂停、释放历史，保留请求模式 3 |
+| Iris 光影开启、光影后叠加 | TAA 仍暂停，原因 `aamod.compat.iris.taa`；不接管光影 jitter / 深度 / 历史 |
+| 关闭光影 | 重新建立 epoch 和历史，恢复 TAA |
+
+### 16.3 运行验证与复现位置
+
+验证环境为 Minecraft 26.2、Fabric Loader 0.19.5 / NeoForge 26.2.0.82、Sodium 0.9.2、Iris 1.11.4、Complementary Reimagined r5.9.3、JDK 25、OpenGL，显卡 RTX 5070 Laptop GPU，驱动 621.01。默认 JDK 27 不变；命令进程选择 JDK 25。
+
+临时验证程序、隔离存档、日志和截图位于 `%TEMP%/aamod-taa-validation`，不进入发布 jar 或项目正式源码。Fabric 使用 `fabric.init.gradle` 与客户端 GameTest；NeoForge 使用 `neo.init.gradle` 与临时事件驱动验证模组。运行命令为 `:fabric:runClient` / `:neoforge:runClient -I <对应脚本> --offline --console=plain`；加 `-Penable_sodium=true` 或 `-Penable_iris=true` 选择组合。各目录 `fabric`、`fabric-sodium`、`fabric-iris`、`neo`、`neo-iris` 保存对应日志 / 截图；NeoForge 临时程序的断言标记输出到 Gradle stdout。
+
+| 检查 | 证据与结果 |
+| --- | --- |
+| 五种采样序列 × 三个周期 | `TAA_SAMPLER_VALIDATION_PASSED`；确定性、值域、周期、phase 唯一性、epoch 和泊松全部前缀通过 |
+| 实际 GPU 历史累积 | 64² 合成目标中心从 128 → 138，解析读回 133；确认历史确实参与 |
+| 深度 / 越界 / reactive 拒绝 | 改变深度或重投影到范围外读回当前 138；大幅变色 30 → 220 读回当前 220 |
+| 合成时间方差 | 120 / 136 交替的固定深度输入，32 帧取末 24 帧，输入方差 64、解析输出约 0.3316；仅证明受控输入的稳定作用 |
+| 原版双端和双端仅 Sodium | 全 15 个组合 ACTIVE，历史帧数达到 8 / 16 / 32，保存同场景 OFF / TAA 截图；NeoForge 仅 Sodium 的完整 stdout 另存 `neo-sodium-final.log` |
+| 双端 Iris 安装但光影关闭 | 全 15 个组合运行，重载、resize、OFF / 重启可恢复 |
+| 双端真实 Complementary 启停 | `FABRIC_TAA_IRIS_SHADER_PAUSE_AND_RECOVERY_PASSED` / `NEO_TAA_IRIS_SHADER_PAUSE_AND_RECOVERY_PASSED`；自动 / 叠加暂停、具体原因、请求模式不变、历史释放、jitter 索引归零、关闭光影恢复 |
+| 参数与界面 | `TAA_PERSISTENCE_PRESETS_NATIVE_QUALITY_PASSED`；保存 / 加载、缺失和非法值、画质联动与原版画质列表；`TAA_CONFIG_RESET_DYNAMIC_CENTER_PASSED` 检查顶部无重置、按钮显隐及居中坐标 |
+| 生命周期 | 传送、FOV、resize、第三人称、资源重载、OFF / 重启和世界退出；NeoForge 额外重进世界及真实下界切换检查 epoch |
+| 重复切换与资源实物 | `TAA_REPEATED_TEXTURE_CLOSE_PIPELINE_BOUND_PASSED cycles=12`；保留旧目标引用确认 5 张历史 / 原始颜色纹理实际关闭，OFF 分配归零，重启后 TAA 管线缓存固定为 2 |
+
+静态场景包含斜边、栅栏、树叶、玻璃与盔甲架，保存 HUD / 手持物品和配置截图。运动补测包含亚像素位置变化、连续镜头旋转、移动实体、粒子、受伤 / 恶心投影和物品栏。截图可用于对照，最终的主观拖影 / 软化容忍度仍需玩家在实际游玩中判断，自动断言不代表所有动态场景无视觉缺陷。
+
+NeoForge 光影验收仅使用加载器属性 `neoforge.disableGlValidation=true`，与现有 `runClientWithIris` 一致，未改 `SharedConstants.IS_RUNNING_IN_IDE`。部分隔离开发客户端在完成断言并保存世界后仍遇到既有 shutdown watchdog / 已关闭 Minecraft module 异常；运行断言通过与 Gradle 客户端进程正常退出分开报告，不将退出异常记为干净的 `runClient` 成功。Vulkan 未运行验证。
+
+### 16.4 成本和采样对照
+
+历史附件成本为 `2*(RGBA16F 8 + D32 4) + RGBA8 4 = 28` 字节 / 像素。960×640 历史计数 17,203,200 字节（约 16.4 MiB），1080p 历史约 55.4 MiB，4K 历史约 221.5 MiB；新增逐物体运动附件另计 16 字节 / 像素，总纹理成本为 44 字节 / 像素，1080p 约 87.0 MiB，4K 约 348.0 MiB。另有顶点／uniform ring、GPU timestamp query pool、CPU 几何快照及驱动开销。全部序列共享同一套目标，不随样本数增加纹理数量。
+
+下面是 Fabric + Sodium、960×640、每个组合稳定后的一次取样，单位 μs。GPU timestamp 覆盖解析、历史复制与写回，CPU 为采样 / 提交时间。这些数值用于确认计时路径与数量级，包含调度噪声，不能作为独立性能基准或不同序列优劣结论。
+
+| 序列 | N | 采样 CPU | 解析 CPU | 解析 GPU |
+| --- | --- | --- | --- | --- |
+| Halton | 8 | 4.4 | 120.9 | 62.080 |
+| Halton | 16 | 2.1 | 81.4 | 61.920 |
+| Halton | 32 | 1.9 | 73.8 | 61.760 |
+| Hammersley | 8 | 1.9 | 144.0 | 61.664 |
+| Hammersley | 16 | 2.2 | 107.2 | 61.728 |
+| Hammersley | 32 | 2.1 | 115.3 | 62.048 |
+| Sobol / Owen | 8 | 3.3 | 86.0 | 61.920 |
+| Sobol / Owen | 16 | 2.6 | 81.8 | 61.696 |
+| Sobol / Owen | 32 | 3.5 | 110.7 | 66.720 |
+| Rank-1 / R2 | 8 | 2.9 | 120.1 | 61.152 |
+| Rank-1 / R2 | 16 | 2.2 | 89.1 | 61.120 |
+| Rank-1 / R2 | 32 | 2.1 | 66.0 | 61.728 |
+| Progressive Poisson | 8 | 1.1 | 97.2 | 61.600 |
+| Progressive Poisson | 16 | 0.8 | 63.9 | 62.656 |
+| Progressive Poisson | 32 | 0.9 | 124.0 | 61.888 |
+
+诊断可读取 `TaaMethod.jitter` 的 epoch / 索引 / 前后 jitter / resetReason，以及 `sampleCpuNanos`、`TaaResolve.historyFrames / allocatedBytes / resolveCpuNanos / resolveGpuNanos`。不支持 timestamp 时 GPU 时间为 -1，不将 CPU 提交时间冒充 GPU 执行时间。
+
+### 16.5 最终构建与发布包检查
+
+使用进程内 JDK 25 执行 `./gradlew.bat :fabric:build :neoforge:build --offline --console=plain`，双端 `BUILD SUCCESSFUL`。最终包为 `../fabric/build/libs/aamod-fabric-0.3.1-alpha+mc26.2.jar` 和 `neoforge/build/libs/aamod-neoforge-0.3.1-alpha+mc26.2.jar`，保留本次工作区的版本设置。
+
+包内确认 `client/antialiasing/taa/` 类、`TemporalSettings`、`CameraMixin`、TAA vertex / fragment shader 和图标齐全；不存在旧 `client/taa/` 类、Iris / Sodium 实现或临时验证类。TAA 字节码为 Java 25（major 69），元数据无未展开占位符，66 个中英文翻译键一致，`git diff --check` 通过。构建生成的 IDE 配置噪声已清理。
+
+第四阶段按本节及逐物体运动向量方案明确的支持范围交付：相机／深度 TAA、已接入几何的物体运动、五种采样序列、参数与持久化、历史生命周期以及 Iris 暂停／恢复。光影内部时域协作、TAA + SSAA 和 Vulkan 的支持边界保持本节说明，不由构建成功推断额外能力。
+
+用户已确认尚未进行目视验收。上表仅记录各次工程检查覆盖的结果；固定设置启动时随后暴露了首帧 `Invalid TAA camera matrix`，因此不能据此宣称所有工程问题已排除。时域采样方案第 9 节第 6 项的用户画质确认仍待完成，第四阶段完整验收暂不标记完成。
+
+用户目视验收采用固定 TAA / Halton / 16 样本的长期运行，由用户控制镜头与游戏操作。自动切换矩阵与静态截图仅证明其各自覆盖的工程行为，不作为时域画质验收。观察时仅记录 epoch / resetReason / jitter 索引 / 已提交历史帧数；CPU 计数增长不等于像素历史实际参与混合。稳定配置下的问题应核对实际历史权重和拒绝路径，不能再通过频繁切参掩盖或混淆。
+
+### 16.6 固定设置启动的相机输入检查
+
+首轮固定观察日志记录 `Invalid TAA camera matrix`，其后持续 FAILED、`submitted=0/16`。此前自动切换模式会解除失败锁定，不能覆盖“从配置直接启动 TAA”的行为；该故障也说明实际抖动不能一概归因于历史尚未积累。
+
+控制器现在先检查原版相机的 `initialized`、位置有限性和投影 / 视图矩阵的有限性与可逆性；在 `renderLevel` 提交实际世界投影时再次检查，覆盖提取之后叠加的受伤、摇晃等屏幕投影效果。无效输入不注入 jitter，也不作为 `CAMERA_MATRICES` 交给解析；当帧显示缺少输入，后续有效帧可自动建立历史。已有历史跨越缺失帧时沿用 `frame_gap` 重置。真正发生在有效输入后的解析异常仍由原有失败隔离处理。
+
+修复后使用 JDK 25 重新构建双端 `0.3.1-alpha+mc26.2` 发布包，`BUILD SUCCESSFUL`。固定启动的运行结果在时域采样方案第 11.5 节记录；不再以切换采样参数的矩阵替代此项检查。
+
+新增输入分支的独立进程验证已通过 `TAA_CAMERA_INPUT_READINESS_AND_RECOVERY_PASSED`：覆盖未初始化、奇异 / 非有限输入、有效下一帧恢复以及已有历史跨缺失帧的 `frame_gap` 重置。它不创建 GPU 设备、不连接或操作观察客户端。命令、证据及适用范围见时域采样方案第 11.5 节。用户画质确认仍是第 10.3 节和时域采样方案第 9 节第 6 项的未完成验收条件。
+
+### 16.7 后锐化与原版 F3 诊断追加
+
+按用户要求新增 TAA 后锐化强度 0–1，默认 0 关闭，两配置入口提供滑条，Options 持久化，模组配置页有独立重置。强度快照在帧准备读取，不触发历史重置；仅最后输出 pass 进行受局部对比和范围约束的五点锐化，历史仍保存未锐化结果。锐化本身不增加原有 28 字节 / 像素的历史附件；逐物体运动附件另计。独立隐藏 GPU 检查已验证强度递增、零强度恒等、局部边界、原始 alpha 与单像素目标，实际路径和证据见时域采样方案第 11.6 节。
+
+诊断从临时快捷栏提示迁移到正式原版 F3 条目 `aamod:taa_diagnostics`，复用原版关闭 / 叠加层 / 常显与保存机制；原版默认 / 性能预设使用叠加层。状态和历史信息为只读，不改设置或历史；不将 submitted 计数解释成像素历史采纳率。双加载器共用实现，临时观察器仅留日志。
+
+Fabric + Sodium 实际运行通过原生 F3 条目、三态显示、独立配置保存重读及真实选项列表检查；Blaze3D 后锐化原始 RGBA 读回通过，强度 0 / 0.5 / 1 输出中心为 160 / 162 / 165，历史仍为 160。证据标记为 `TAA_F3_NATIVE_TRISTATE_PERSISTENCE_OPTIONS_PASSED` 与 `TAA_POST_SHARPEN_GPU_PASSED`，不涉及玩家设置的自动切换。后续保留用户保存的采样 / 强度供长期观察，用户画质验收仍未完成。

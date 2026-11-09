@@ -35,12 +35,21 @@ context. Treat GraphFlow output as structured, token-saving context.
 Anti Aliasing Mod (`aamod`) is an Architectury workspace targeting Minecraft 26.2
 on Fabric and NeoForge. It uses Kotlin, including client mixins. The existing code exposes
 OFF/FXAA/SMAA/TAA/SSAA video settings with persisted IDs 0/1/2/3/4. FXAA, SSAA and
-SMAA 1x run through shared render mixins and `client/antialiasing/`; TAA remains
-explicitly unimplemented. Iris/Sodium integration is phase three and TAA is phase
+SMAA 1x run through shared render mixins and `client/antialiasing/`; TAA lives in
+`client/antialiasing/taa/` and resolves world depth/history before held items. Iris/Sodium integration is phase three and TAA is phase
 four. Phase three includes optional dependencies, the Sodium video settings entry,
 and the isolated Iris 1.11.4 adapter. Automatic policy pauses AA with active
 shaders; explicit overlay supports FXAA/SMAA on sRGB RGBA8 output. SSAA pauses with
-active shaders. `AAModClient` is a lifecycle
+active shaders, as does TAA even under overlay policy. TAA supports five deterministic
+sequences with 8/16/32 samples, defaults to Halton + 16, and uses camera/depth
+reprojection plus per-object motion vectors for entity/block-entity ModelPart
+animation and vanilla baked item/block geometry. FRAPI/Indigo and Sodium extended
+item/block meshes use captured rejection coverage, not precise vertex history.
+`taa/motion/` captures corresponding
+actual vertices across deferred Submit preparation and rasterizes RGBA32F motion
+before resolve; translucent, unmatched and custom captured geometry rejects
+history. Particles and other uncaptured effects retain reactive rejection.
+`AAModClient` is a lifecycle
 entry, not the render hook.
 
 - `common/src/main/kotlin/com/nts/aamod/`: shared initialization, client code,
@@ -92,7 +101,7 @@ from the repository root. On PowerShell use `./gradlew.bat`; on Linux/macOS use
 The machine default is JDK 27. Actual Gradle script configuration under JDK 27
 fails with `Unsupported class file major version 71`; use process-local JAVA_HOME
 for JDK 25 without changing the system default. Keep Java and Kotlin API/bytecode
-targets at 25. See `AA_IMPLEMENTATION_PLAN_ZH.md` for the verification record.
+targets at 25. See `docs/AA_IMPLEMENTATION_PLAN_ZH.md` for the verification record.
 
 | Command (PowerShell) | Purpose |
 | --- | --- |

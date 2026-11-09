@@ -1,11 +1,11 @@
 # Anti Aliasing Mod
 
-[**English**] | [[**简体中文**](README_ZH.md)]
+[**English**] | [[**简体中文**](docs/README_ZH.md)]
 
 ## Introduction
 
-A Minecraft mod that implements FXAA, SSAA and SMAA 1x through the default
-Blaze3D rendering abstraction, with TAA planned for a later phase.
+A Minecraft mod that implements FXAA, SSAA, SMAA 1x and traditional TAA through
+the default Blaze3D rendering abstraction.
 
 This repository is an **Architectury-based multi-loader workspace**: one shared
 codebase builds a Fabric jar and a NeoForge jar.
@@ -19,7 +19,11 @@ codebase builds a Fabric jar and a NeoForge jar.
   before the HUD. Available scales are 1.5×, 2×, 3× and 4× per axis; the default is 2×.
 - **SMAA 1x uses color edge detection, Area/Search lookup textures and neighborhood
   blending**, with the official Low, Medium, High and Ultra presets. High is the default.
-- **TAA remains a placeholder** with explicit status text and no substitute algorithm.
+- **TAA uses subpixel world projection jitter and depth-based history reprojection**,
+  with neighborhood constraints and color-change rejection. It resolves before held
+  items; held items and GUI stay outside its history. The default is Halton (2, 3)
+  with 16 samples. Entity and block-entity models, including animated model parts,
+  and baked item/block geometry use per-object motion vectors.
 
 The roadmap has four phases:
 
@@ -28,17 +32,18 @@ The roadmap has four phases:
 | One | Vanilla FXAA and shared extension points | Implemented; see the verification record for coverage |
 | Two | Vanilla SSAA and SMAA 1x | Implemented; verification details and limits are recorded in the plan |
 | Three | Iris / Sodium integration | Implemented for the versions and support boundaries below |
-| Four | TAA | Planned: jitter, history reprojection, and multiple sampling sequences |
+| Four | TAA | Implemented: reprojection, history rejection and five sampling sequences; active Iris shaders pause TAA |
 
 Rendering verification covers vanilla, Sodium, and Iris 1.11.4 with the support
-boundaries below. TAA remains phase four.
+boundaries below. TAA works without active shader packs; its separate runtime
+verification and limitations are recorded in section 16 of the implementation plan.
 
 Select a mode in Options → Video Settings → Anti-Aliasing. It takes effect on the
 next world frame and persists in the vanilla `options.txt` as `antialiasing`:
 OFF = 0, FXAA = 1, SMAA = 2, TAA = 3 and SSAA = 4.
 Missing or invalid values fall back to OFF. Selecting a graphics preset also selects
 its AA mode: Fast → FXAA, Fancy → SMAA, Fabulous → TAA. Manually changing the AA
-mode switches the graphics preset to Custom. TAA remains unimplemented.
+mode switches the graphics preset to Custom.
 
 ### FXAA configuration
 
@@ -82,8 +87,55 @@ change mode to retry. SMAA upstream provenance and license are bundled under
 `assets/aamod/licenses/`.
 
 The current client verification uses OpenGL; Vulkan has not been validated.
-See [the implementation plan and verification record](AA_IMPLEMENTATION_PLAN_ZH.md)
+See [the implementation plan and verification record](docs/AA_IMPLEMENTATION_PLAN_ZH.md)
 for stage boundaries and follow-up work.
+
+### TAA configuration and limits
+
+The shared configuration screen and vanilla Video Settings quality section expose
+TAA Jitter Sequence and TAA Jitter Samples. Sequence choices are Halton (2, 3),
+Hammersley, Owen-scrambled Sobol, Rank-1 / R2 and a fixed progressive Poisson table.
+Every sequence supports 8, 16 and 32 samples. Defaults are Halton and 16; shared
+configuration controls have individual reset buttons.
+
+Options persist as `aamod_taa_sequence` (0–4 in the order above) and
+`aamod_taa_samples` (8 / 16 / 32). Missing or invalid values restore 0 / 16.
+Changing either option clears history. Mode, size, projection/FOV, camera cut,
+world/dimension, resource reload and external pipeline changes also reset history.
+Only TAA jitters world rendering; culling uses a stable one-pixel guard margin.
+
+TAA Post-Sharpening is adjustable from 0 to 1 in both configuration screens,
+with an individual reset button in the shared screen. The default is 0 (off),
+persisted as `aamod_taa_sharpness`; missing or invalid values restore 0.
+It sharpens resolved world output with local contrast and overshoot limits.
+Changing strength takes effect on the next world frame without clearing history;
+sharpened output never feeds back into temporal history. Held items and GUI are unaffected.
+
+F3 options include `taa_diagnostics` under Anti Aliasing Mod. The native Never,
+In Overlay and Always On controls determine its visibility and persist in
+`debug-profile.json`; the default debug profiles show it in the F3 overlay.
+It reports TAA state, history epoch, submitted history count, jitter frame index,
+sharpening, the last reset reason, captured vertices, matched/rejected geometry
+batches and capture budget status. Submitted history and matched batches are CPU counts and do
+not measure how many pixels accept history. It does not use the action bar.
+
+TAA reconstructs static camera motion from current/previous matrices and world
+depth. Captured entity and block-entity model parts and vanilla baked item/block geometry
+use corresponding previous vertices for translation, rotation, scaling and model
+animation. A separate motion pass checks world depth and texture alpha before
+TAA consumes its vectors. New, unmatched, translucent and custom captured geometry
+rejects history. FRAPI/Indigo and Sodium extended item/block meshes also receive
+rejection coverage; precise vertex history for those meshes is not implemented.
+ModelPart animation retains precise correspondence with Sodium. Particles and other uncaptured effects retain depth/color
+rejection; residual ghosting or loss of accumulation remains possible. Sky pixels
+use the current frame. Held items, HUD, menus and later screen effects are not
+accumulated. TAA does not increase render resolution or combine with SSAA.
+History and the RGBA32F motion texture cost 44 bytes per output pixel, about
+87.0 MiB at 1080p and 348.0 MiB at 4K, excluding driver overhead and vertex/uniform/query
+buffers. Capture is limited to 262,144 vertices and 8,192 batches per frame;
+exceeding either budget disables history blending for that frame.
+See [the motion-vector implementation plan](docs/OBJECT_MOTION_VECTORS_PLAN_ZH.md) for
+the reference revision, coverage and validation evidence.
 
 ### Iris shader compatibility
 
@@ -98,8 +150,10 @@ The shared configuration screen includes **Shader Pack Anti-Aliasing**:
   pauses its AA and keeps your requested mode. Shader pack settings are unchanged.
 - **Apply after shaders** enables FXAA or SMAA after Iris final color conversion
   and vanilla world effects, before the HUD. It can duplicate the pack's own AA.
-- **SSAA with active shaders is unsupported** and pauses with a reason. Without
-  active shaders, FXAA, SMAA and SSAA work normally, including when Iris is installed.
+- **SSAA and TAA with active shaders are unsupported** and pause with a reason.
+  This also applies to TAA under Apply after shaders: the adapter cannot coordinate
+  the pack's jitter, depth and history. Without active shaders, all four algorithms
+  work normally, including when Iris is installed.
 
 The adapter supports **Iris 1.11.4**, sRGB output and an RGBA8 main target. Other
 Iris versions, other output color spaces, missing final output, and API failures
@@ -113,8 +167,9 @@ screen; the AA mode tooltip includes the current pause reason.
 Runtime checks use Complementary Reimagined r5.9.3 on both loaders. NeoForge's
 development-only graphics validation exposes an Iris vertex-format array bug
 that also reproduces without this mod. NeoForge shader checks therefore use
-production conditions (`SharedConstants.IS_RUNNING_IN_IDE=false`) in a temporary
-validation mod; the AA mod does not change that flag. See the verification record
+the loader property `neoforge.disableGlValidation=true` for phase-four validation,
+as does `runClientWithIris`; the global IDE flag stays unchanged. Phase-three
+validation used a temporary production-mode fixture. See the verification record
 for evidence and the separate development-client shutdown limitation.
 
 ## Workspace layout

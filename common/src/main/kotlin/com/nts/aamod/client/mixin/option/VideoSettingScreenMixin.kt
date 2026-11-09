@@ -1,6 +1,7 @@
 package com.nts.aamod.client.mixin.option
 
 import com.nts.aamod.client.option.VideoAntiAliasingSettings.getOption
+import com.nts.aamod.client.option.TemporalSettings
 import net.minecraft.client.OptionInstance
 import net.minecraft.client.Options
 import net.minecraft.client.gui.screens.options.VideoSettingsScreen
@@ -16,8 +17,11 @@ abstract class VideoSettingScreenMixin {
         @JvmStatic
         private fun qualityOptions(options: Options?, cir: CallbackInfoReturnable<Array<OptionInstance<*>?>?>) {
             val vanillaOptions: Array<OptionInstance<*>?> = cir.getReturnValue()!!
-            val extendedOptions = vanillaOptions.copyOf(vanillaOptions.size + 1)
+            val extendedOptions = vanillaOptions.copyOf(vanillaOptions.size + 4)
             extendedOptions[vanillaOptions.size] = getOption()
+            extendedOptions[vanillaOptions.size + 1] = TemporalSettings.sequence
+            extendedOptions[vanillaOptions.size + 2] = TemporalSettings.samples
+            extendedOptions[vanillaOptions.size + 3] = TemporalSettings.sharpness
             cir.setReturnValue(extendedOptions)
         }
     }

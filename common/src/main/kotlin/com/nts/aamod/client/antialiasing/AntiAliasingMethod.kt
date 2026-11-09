@@ -55,6 +55,8 @@ interface AntiAliasingMethod : AutoCloseable {
 
     fun prepareProjection(context: FrameContext, projection: Matrix4f) {}
 
+    fun prepareWorldProjection(context: FrameContext, projection: Matrix4f): Matrix4f = projection
+
     fun beginWorldRender(context: FrameContext) {}
 
     fun endWorldRender() {}

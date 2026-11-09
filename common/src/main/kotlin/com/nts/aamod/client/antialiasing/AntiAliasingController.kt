@@ -8,6 +8,8 @@ import com.nts.aamod.AAMod
 import com.nts.aamod.client.antialiasing.fxaa.FxaaMethod
 import com.nts.aamod.client.antialiasing.ssaa.SsaaMethod
 import com.nts.aamod.client.antialiasing.smaa.SmaaMethod
+import com.nts.aamod.client.antialiasing.taa.TaaMethod
+import com.nts.aamod.client.antialiasing.taa.motion.MotionCapture
 import com.nts.aamod.client.option.VideoAntiAliasingSettings
 import com.nts.aamod.client.compat.iris.IrisCompatibility
 import net.minecraft.client.Minecraft
@@ -18,12 +20,14 @@ import net.minecraft.client.renderer.state.level.CameraRenderState
 import net.minecraft.world.entity.Entity
 import org.joml.Matrix4f
 import java.util.EnumSet
+import java.util.Locale
 
 object AntiAliasingController {
     private val methods: Map<Int, AntiAliasingMethod> = mapOf(
         VideoAntiAliasingSettings.FXAA to FxaaMethod(),
         VideoAntiAliasingSettings.SSAA to SsaaMethod(),
-        VideoAntiAliasingSettings.SMAA to SmaaMethod()
+        VideoAntiAliasingSettings.SMAA to SmaaMethod(),
+        VideoAntiAliasingSettings.TAA to TaaMethod()
     )
     private var provider: RenderEnvironmentProvider? = null
     private var frameProvider: RenderEnvironmentProvider = VanillaRenderEnvironment
@@ -48,6 +52,21 @@ object AntiAliasingController {
 
     @JvmStatic
     fun getStatus(): AntiAliasingStatus = status
+
+    fun temporalDiagnostics(): List<String> {
+        val method = methods.getValue(VideoAntiAliasingSettings.TAA) as TaaMethod
+        val jitter = method.jitter
+        val state = status
+        val selected = frame?.requestedMode == VideoAntiAliasingSettings.TAA
+        return listOf(
+            "TAA ${if (selected) state.state.name else "INACTIVE"} | epoch=${jitter.epoch}" +
+                " | submitted=${method.resolve.historyFrames}/${method.sampleCount} | phaseFrame=${jitter.frameIndex}" +
+                " | sharpen=${String.format(Locale.ROOT, "%.2f", method.sharpening)}",
+            "TAA last reset: ${jitter.resetReason}" + (state.reason?.let { " | status reason: $it" } ?: ""),
+            "TAA objects: vertices=${MotionCapture.vertices} | matchedBatches=${MotionCapture.validBatches}" +
+                " | rejectBatches=${MotionCapture.rejectedBatches} | budget=${if (MotionCapture.overflow) "EXCEEDED" else "OK"}"
+        )
+    }
 
     fun setEnvironmentProvider(replacement: RenderEnvironmentProvider) {
         RenderSystem.assertOnRenderThread()
@@ -130,24 +149,49 @@ object AntiAliasingController {
     @JvmStatic
     fun cameraExtracted(cameraState: CameraRenderState) {
         var context = frame ?: return
-        context = context.copy(camera = CameraSnapshot(cameraState.projectionMatrix, cameraState.viewRotationMatrix, cameraState.pos))
+        val camera = if (cameraState.initialized) {
+            CameraSnapshot.capture(cameraState.projectionMatrix, cameraState.viewRotationMatrix, cameraState.pos)
+        } else null
+        context = context.copy(camera = camera)
         val method = currentMethod()
-        if (method != null && RenderStage.FRAME_PREPARE in method.requirements) {
+        if (method != null && camera != null && RenderStage.FRAME_PREPARE in method.requirements) {
             guarded(method) {
                 if (canPrepare(method, context)) method.prepareProjection(context, cameraState.projectionMatrix)
             }
         }
-        context = context.copy(camera = CameraSnapshot(cameraState.projectionMatrix, cameraState.viewRotationMatrix, cameraState.pos))
         frame = context
         completedStages.add(RenderStage.FRAME_PREPARE)
+    }
+
+    @JvmStatic
+    fun cullingProjection(projection: Matrix4f): Matrix4f {
+        val context = frame ?: return projection
+        if (!framePrepared || currentMethod()?.mode != VideoAntiAliasingSettings.TAA || context.width <= 0 || context.height <= 0) {
+            return projection
+        }
+        return Matrix4f().scaling(
+            context.width / (context.width + 2f), context.height / (context.height + 2f), 1f
+        ).mul(projection)
     }
 
     @JvmStatic
     fun worldProjection(projection: Matrix4f): Matrix4f {
         val context = frame ?: return projection
         val camera = context.camera ?: return projection
-        frame = context.copy(camera = CameraSnapshot(projection, camera.view(Matrix4f()), camera.position))
-        return projection
+        if (!CameraSnapshot.isUsable(projection)) {
+            frame = context.copy(camera = null)
+            if (RenderInput.CAMERA_MATRICES in currentMethod()?.requirements?.get(RenderStage.WORLD_RESOLVE).orEmpty()) {
+                status = AntiAliasingStatus(context.requestedMode, RunState.MISSING_INPUT, "WORLD_PROJECTION")
+            }
+            return projection
+        }
+        var actual = projection
+        val method = currentMethod()
+        if (method != null && framePrepared) guarded(method) {
+            actual = method.prepareWorldProjection(context, projection)
+        }
+        frame = context.copy(camera = CameraSnapshot(actual, camera.view(Matrix4f()), camera.position))
+        return actual
     }
 
     @JvmStatic
