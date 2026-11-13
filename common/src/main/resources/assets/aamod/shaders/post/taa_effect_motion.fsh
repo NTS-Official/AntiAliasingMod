@@ -4,9 +4,7 @@ uniform sampler2D Sampler0;
 #if !defined(EFFECT_WORLD) && EFFECT_OUTPUT == 2
 uniform sampler2D LayerDepth;
 #endif
-#if defined(EFFECT_WORLD) || (EFFECT_OUTPUT != 1 && EFFECT_OUTPUT != 3)
 uniform sampler2D EntryDepth;
-#endif
 #if !defined(EFFECT_WORLD) && EFFECT_OUTPUT == 2
 uniform sampler2D ReferenceMotion;
 uniform sampler2D ReferenceIdentity;
@@ -24,11 +22,18 @@ in vec2 effectState;
 flat in vec3 identity;
 flat in float coherenceGroup;
 in vec2 previousLocal;
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
+#if !defined(EFFECT_WORLD) && EFFECT_OUTPUT == 0
+layout(location = 1) out vec4 surfaceIdentity;
+layout(location = 2) out vec4 surfaceCoherence;
+#endif
 
 void main() {
-    float alpha = texture(Sampler0, textureUv).a * effectState.x;
-    if (alpha <= max(Settings.x, 0.00001)) discard;
+    vec4 texel = texture(Sampler0, textureUv);
+    float textureAlpha = Settings.z > 1.5 ? 1.0 : Settings.z > 0.5 ? texel.r : texel.a;
+    float alpha = textureAlpha * effectState.x;
+    float cutoutAlpha = Settings.w > 0.5 ? textureAlpha : alpha;
+    if (cutoutAlpha < Settings.x || alpha <= 0.00001) discard;
     vec2 rawUv = gl_FragCoord.xy * Size.xy;
     float currentDepth = gl_FragCoord.z;
 #if !defined(EFFECT_WORLD) && EFFECT_OUTPUT == 2
@@ -63,15 +68,12 @@ void main() {
     // Same model, reliable surfaces may share a warp. Motion variance still rejects deformation/parallax.
     fragColor = alpha * vec4(1.0, min(dot(delta, delta), 1024.0), different && !sharedMotion ? 1.0 : 0.0,
         sharedMotion ? 0.0 : abs(currentDepth - layerDepth));
-#elif EFFECT_OUTPUT == 1
-    // Hardware EQUAL uses the exact representative depth from the motion pass.
-    fragColor = vec4(identity, confidence);
-#elif EFFECT_OUTPUT == 3
-    int group = int(coherenceGroup + 0.5);
-    fragColor = vec4(vec3(group & 255, (group >> 8) & 255, (group >> 16) & 255) / 255.0, confidence);
 #else
     float entryDepth = texture(EntryDepth, rawUv).r;
     if (currentDepth + tolerance < entryDepth) discard;
     fragColor = motion;
+    surfaceIdentity = vec4(identity, confidence);
+    int group = int(coherenceGroup + 0.5);
+    surfaceCoherence = vec4(vec3(group & 255, (group >> 8) & 255, (group >> 16) & 255) / 255.0, confidence);
 #endif
 }

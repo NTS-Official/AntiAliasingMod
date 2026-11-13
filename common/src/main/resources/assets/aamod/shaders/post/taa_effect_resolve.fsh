@@ -36,6 +36,14 @@ void main() {
     vec4 identity = texture(IdentitySampler, rawUv);
     float currentDepth = texture(DepthSampler, rawUv).r;
     float currentTolerance = max(0.000001, max(abs(currentDepth) * 0.002, fwidth(currentDepth) * 1.5));
+    vec4 motion = texture(MotionSampler, rawUv);
+    float expectedDepth = motion.z;
+    float tolerance = max(0.000001, max(abs(expectedDepth) * 0.002, fwidth(expectedDepth) * 1.5));
+    vec4 sampledCurrent = texture(CurrentSampler, rawUv);
+    if (all(equal(sampledCurrent, vec4(0.0)))) {
+        fragColor = vec4(0.0);
+        return;
+    }
     vec2 currentPixel = rawUv * Size.zw - 0.5;
     ivec2 currentBase = ivec2(floor(currentPixel));
     vec2 currentFraction = fract(currentPixel);
@@ -60,13 +68,10 @@ void main() {
 #else
     fragColor = current;
 #endif
-    vec4 motion = texture(MotionSampler, rawUv);
     if (Settings.x <= 0.0 || currentSupport < 0.999 || current.a <= 0.00001 || identity.a <= 0.0 || motion.a <= 0.0) return;
     vec2 previousRawUv = rawUv + motion.xy;
     vec2 previousUv = previousRawUv - Jitter.zw;
     if (any(isnan(previousRawUv)) || any(isinf(previousRawUv)) || !inside(previousRawUv) || !inside(previousUv)) return;
-    float expectedDepth = motion.z;
-    float tolerance = max(0.000001, max(abs(expectedDepth) * 0.002, fwidth(expectedDepth) * 1.5));
     if (expectedDepth <= 0.0 || expectedDepth > 1.0) return;
     vec4 conflict = texture(ConflictSampler, rawUv);
     int reasons = effectConflictReasons(conflict);

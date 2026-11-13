@@ -146,13 +146,15 @@ object TemporalEffects {
         modelView: Matrix4f? = null
     ) {
         if (!active) return
-        val actualProjection = projection ?: return
         captureSafely {
-            val matrix = Matrix4f(actualProjection).mul(modelView ?: RenderSystem.getModelViewMatrixCopy())
+            val matrix = captureTransform(modelView ?: RenderSystem.getModelViewMatrixCopy()) ?: return@captureSafely
             val clip = EffectGeometry.project(quad.position, matrix)
             captureProjected(quad, domain, clip, appearance, pattern)
         }
     }
+
+    internal fun captureTransform(modelView: Matrix4f): Matrix4f? =
+        projection?.takeIf { active }?.let { Matrix4f(it).mul(modelView) }
 
     internal fun captureProjected(
         quad: EffectQuad, domain: EffectDomain, clip: FloatArray, appearance: EffectAppearance,

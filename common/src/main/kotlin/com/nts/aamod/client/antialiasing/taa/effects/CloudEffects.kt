@@ -1,5 +1,6 @@
 package com.nts.aamod.client.antialiasing.taa.effects
 
+import com.mojang.blaze3d.systems.RenderSystem
 import net.minecraft.client.CloudStatus
 import net.minecraft.client.particle.SingleQuadParticle
 import net.minecraft.client.renderer.RenderPipelines
@@ -50,6 +51,10 @@ class CloudEffects {
         val layer = SingleQuadParticle.Layer(true, MissingTextureAtlasSprite.getLocation(), pipeline)
         val phase = time / (textureWidth * 400L)
         val stableCenterX = centerX + phase * textureWidth
+        val transform = TemporalEffects.captureTransform(RenderSystem.getModelViewMatrixCopy()) ?: return
+        val material = "${pipeline.location}|$revision"
+        val uv = floatArrayOf(0f, 0f, 1f, 0f, 1f, 1f, 0f, 1f)
+        val appearance = EffectAppearance(uv, color, revision)
         for (face in faces) {
             val corners = FACE_VERTICES[face.direction]
             val positions = FloatArray(12)
@@ -59,12 +64,13 @@ class CloudEffects {
                 positions[corner * 3 + 1] = corners[source * 3 + 1] * 4f + (bottomY - camera.y).toFloat()
                 positions[corner * 3 + 2] = (corners[source * 3 + 2] + face.z) * 12f - zInCell
             }
+            val clip = EffectGeometry.project(positions, transform)
+            if (EffectGeometry.outsideView(clip)) continue
             val owner = ((stableCenterX + face.x) shl 32) xor ((centerZ + face.z) and 0xffffffffL)
             val key = EffectSurfaceKey(EffectKind.CLOUD, owner, face.direction * 2 + if (face.flags and 16 != 0) 1 else 0,
-                "${pipeline.location}|$revision")
-            val uv = floatArrayOf(0f, 0f, 1f, 0f, 1f, 1f, 0f, 1f)
-            TemporalEffects.capture(EffectQuad(key, layer, positions, uv, color), EffectDomain.CLOUDS,
-                EffectAppearance(uv, color, revision))
+                material)
+            TemporalEffects.captureProjected(EffectQuad(key, layer, positions, uv, color), EffectDomain.CLOUDS,
+                clip, appearance)
         }
     }
 

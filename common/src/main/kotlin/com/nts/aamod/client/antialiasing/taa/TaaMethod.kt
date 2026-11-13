@@ -145,10 +145,21 @@ class TaaMethod : AntiAliasingMethod {
         TemporalEffects.failure?.let { composition.reject(it) }
         composition.finishCapture()
         val output = composition.output
-        if (effectsEnabled && output != null) {
-            resolve.present(environment.target, output)
-            resolve.commit()
-            composition.commit()
+        val historySubmitted = if (effectsEnabled && output != null) {
+            try {
+                resolve.present(environment.target, output)
+            } catch (exception: Exception) {
+                resolve.resetHistory()
+                composition.abort()
+                try { composition.restoreNativeColor() }
+                catch (recovery: Exception) { exception.addSuppressed(recovery); throw exception }
+                composition.reject("effect_output_failed", exception)
+            }
+            if (composition.failure == null) {
+                resolve.commit()
+                composition.commit()
+                true
+            } else false
         } else {
             resolve.abort()
             if (effectsEnabled) {
@@ -166,8 +177,9 @@ class TaaMethod : AntiAliasingMethod {
             } else {
                 resolve.render(environment.target, reprojection(context), jitter.current, jitter.previous, samples, sharpness, motion)
             }
+            !effectsEnabled
         }
-        if (!effectsEnabled || output != null) {
+        if (historySubmitted) {
             MotionCapture.commit()
             TemporalEffects.commit()
             previousCamera = camera
@@ -232,6 +244,7 @@ class TaaMethod : AntiAliasingMethod {
     override fun close() = invalidate(InvalidationReason.SHUTDOWN)
 
     override fun endWorldRender() {
+        resolve.abort()
         MotionCapture.endFrame()
         TemporalEffects.endFrame()
         scene.endFrame()

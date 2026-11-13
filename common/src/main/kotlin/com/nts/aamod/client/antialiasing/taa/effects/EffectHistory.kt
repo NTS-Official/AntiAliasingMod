@@ -12,7 +12,17 @@ enum class EffectDomain { OPAQUE, TRANSLUCENT, ITEM_ENTITY, PARTICLES, WEATHER, 
 
 enum class EffectRejection { NONE, NEW_SURFACE, FRAME_GAP, APPEARANCE, TOPOLOGY, PATTERN_DISCONTINUITY, UNRELIABLE_SOURCE, CAPTURE_BUDGET }
 
-data class EffectSurfaceKey(val kind: EffectKind, val owner: Long, val part: Int, val material: String)
+data class EffectSurfaceKey(val kind: EffectKind, val owner: Long, val part: Int, val material: String) {
+    override fun hashCode(): Int {
+        var hash = (owner xor (owner ushr 33)) * -49064778989728563L
+        hash = (hash xor (hash ushr 33)) * -4265267296055464877L
+        hash = hash xor (hash ushr 33)
+        var result = kind.hashCode()
+        result = 31 * result + (hash xor (hash ushr 32)).toInt()
+        result = 31 * result + part
+        return 31 * result + material.hashCode()
+    }
+}
 
 class EffectAppearance(
     uv: FloatArray, val color: Int, val revision: Long = 0L,
@@ -159,8 +169,9 @@ class EffectHistory(
         pending[key] = snapshot
         vertices += snapshot.vertexCount
         val confidence = prior?.let { appearance.confidence(it.appearance) } ?: 0f
+        val domainRejection = exhausted[domain] ?: previouslyExhausted[domain]
         val rejection = when {
-            domain in rejectedDomains -> rejectedReasons.getValue(domain)
+            domainRejection != null -> domainRejection
             prior == null -> EffectRejection.NEW_SURFACE
             committedFrame != frame - 1 || prior.frame != frame - 1 || prior.epoch != epoch -> EffectRejection.FRAME_GAP
             prior.domain != domain || prior.vertexCount != snapshot.vertexCount -> EffectRejection.TOPOLOGY

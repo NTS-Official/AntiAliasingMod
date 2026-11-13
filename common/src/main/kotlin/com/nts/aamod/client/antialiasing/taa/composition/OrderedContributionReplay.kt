@@ -18,10 +18,6 @@ class OrderedContributionReplay @JvmOverloads constructor(private val timings: E
     private var pending: FrozenPassRecorder? = null
     private val occurrences = linkedMapOf<Triple<String, String, String>, Int>()
     val allocatedBytes: Long get() = listOfNotNull(contribution, entry).sumOf { it.width.toLong() * it.height * 8 }
-    var replayedDraws = 0
-        private set
-    var replayedIntervals = 0
-        private set
 
     fun reserve(width: Int, height: Int, availableBytes: Long) {
         require(width > 0 && height > 0)
@@ -32,15 +28,22 @@ class OrderedContributionReplay @JvmOverloads constructor(private val timings: E
         releaseTargets()
         try {
             contribution = target("aamod ordered contribution", width, height)
-            entry = target("aamod ordered entry depth", width, height)
+            entry = target("aamod ordered entry snapshot", width, height)
         } catch (exception: Exception) { releaseTargets(); throw exception }
     }
 
     fun beginFrame() {
         check(pending == null) { "An ordered contribution pass was not closed" }
-        replayedDraws = 0
-        replayedIntervals = 0
         occurrences.clear()
+    }
+
+    fun preserveNativeColor(source: RenderTarget): RenderTarget {
+        check(pending == null) { "Cannot preserve native color during a contribution capture" }
+        val snapshot = checkNotNull(contribution)
+        RenderSystem.getDevice().createCommandEncoder().copyTextureToTexture(
+            checkNotNull(source.colorTexture), checkNotNull(snapshot.colorTexture),
+            0, 0, 0, 0, 0, source.width, source.height)
+        return snapshot
     }
 
     fun capture(
@@ -75,7 +78,7 @@ class OrderedContributionReplay @JvmOverloads constructor(private val timings: E
             TemporalCommandCapture.suppress {
                 try {
                     val plan = ContributionIntervals.create(phase, target, frozen, color.textureView().texture())
-                    if (plan.failure != null) fail(plan.failure, null)
+                    if (plan.failure != null) { fail(plan.failure, null); return@suppress }
                     else for (interval in plan.intervals) {
                         val material = Triple(phase, target, interval.key.material)
                         val occurrence = occurrences.getOrDefault(material, 0)
@@ -102,13 +105,11 @@ class OrderedContributionReplay @JvmOverloads constructor(private val timings: E
                             encoder.createRenderPass(replay).use { pass ->
                                 for (draw in interval.draws) {
                                     draw.replay(pass, resolvedPipelines.getValue(draw.state.pipeline))
-                                    replayedDraws++
                                 }
                             }
                         }
                         if (interval.blend != ContributionBlend.DEPTH_ONLY) consume(actualInterval, output, entrance)
                         measure { entrance.copyDepthFrom(output) }
-                        replayedIntervals++
                     }
                 } catch (exception: Exception) { fail("composition_replay_failed", exception) }
             }
@@ -140,7 +141,5 @@ class OrderedContributionReplay @JvmOverloads constructor(private val timings: E
         releaseTargets()
         pipelines.clear()
         occurrences.clear()
-        replayedDraws = 0
-        replayedIntervals = 0
     }
 }

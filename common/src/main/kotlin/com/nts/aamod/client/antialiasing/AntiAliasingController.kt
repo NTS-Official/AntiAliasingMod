@@ -74,7 +74,7 @@ object AntiAliasingController {
                 " | capture=${method.composition.captureRejections.ifEmpty { "OK" }}" +
                 " | history_budget=${method.composition.historyBudgetDomains.ifEmpty { "OK" }}" +
                 " | reason=${TemporalEffects.failure ?: method.scene.failure ?: method.composition.failure ?: "OK"}",
-            "TAA effects GPU sample: ${method.composition.historyTelemetry}",
+            "TAA effects GPU sample: ${method.composition.sampleHistoryTelemetry()}",
             "TAA effects timings: ${method.composition.timings.diagnostic}",
             "TAA effect surfaces: ${TemporalEffects.capturedKinds}",
             "TAA owned GPU attachments/buffers: " + String.format(Locale.ROOT, "%.2f MiB",

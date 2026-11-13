@@ -7,6 +7,24 @@ import org.joml.Vector4f
 import kotlin.math.abs
 
 object EffectGeometry {
+    fun outsideView(clip: FloatArray): Boolean {
+        var outside = 31
+        for (offset in clip.indices step 4) {
+            val horizontal = clip[offset]
+            val vertical = clip[offset + 1]
+            val distance = clip[offset + 3]
+            var planes = 0
+            if (horizontal < -distance) planes = planes or 1
+            if (horizontal > distance) planes = planes or 2
+            if (vertical < -distance) planes = planes or 4
+            if (vertical > distance) planes = planes or 8
+            if (distance <= 0f) planes = planes or 16
+            outside = outside and planes
+            if (outside == 0) return false
+        }
+        return outside != 0
+    }
+
     fun quad(x: Float, y: Float, z: Float, rotation: Quaternionf, scale: Float): FloatArray {
         val result = FloatArray(12)
         val local = Vector3f()

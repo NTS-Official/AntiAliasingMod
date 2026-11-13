@@ -33,7 +33,7 @@ The roadmap has five phases:
 | Two | Vanilla SSAA and SMAA 1x | Implemented; verification details and limits are recorded in the plan |
 | Three | Iris / Sodium integration | Implemented for the versions and support boundaries below |
 | Four | TAA | Implemented and accepted within the documented scope: reprojection, object motion and five sampling sequences; active Iris shaders pause TAA |
-| Five | Temporal particles, weather and world effects | Designed, not implemented: independent layer histories, effect motion and compatibility with vanilla order-independent transparency; see [the full architecture](docs/plan/TEMPORAL_EFFECTS_PLAN_ZH.md) |
+| Five | Temporal particles, weather and world effects | In progress: effect capture, independent histories and both native transparency paths are connected; complete compatibility and fixed-settings visual acceptance remain pending. See [the architecture and evidence](docs/plan/TEMPORAL_EFFECTS_PLAN_ZH.md) |
 
 Rendering verification covers vanilla, Sodium, and Iris 1.11.4 with the support
 boundaries below. TAA works without active shader packs; its separate runtime
@@ -87,11 +87,11 @@ failure instead of silently selecting another algorithm. Reload resources or
 change mode to retry. SMAA upstream provenance and license are bundled under
 `assets/aamod/licenses/`.
 
-Agent-run client checks use OpenGL. The user has verified AA on native Vulkan
-with both vanilla rendering and Sodium. Iris is inactive on that backend, so
+Rendering uses the Blaze3D abstraction. When Iris is inactive on native Vulkan,
 its optional API is not queried and its shader policies do not block native AA.
 See [the implementation plan and verification record](docs/plan/AA_IMPLEMENTATION_PLAN_ZH.md)
-for stage boundaries and follow-up work.
+and [phase five's evidence](docs/plan/TEMPORAL_EFFECTS_PLAN_ZH.md) for the exact
+environment coverage, stage boundaries and follow-up work.
 
 ### TAA configuration and limits
 
@@ -119,23 +119,37 @@ In Overlay and Always On controls determine its visibility and persist in
 `debug-profile.json`; the default debug profiles show it in the F3 overlay.
 It reports TAA state, history epoch, submitted history count, jitter frame index,
 sharpening, the last reset reason, captured vertices, matched/rejected geometry
-batches and capture budget status. Submitted history and matched batches are CPU counts and do
-not measure how many pixels accept history. It does not use the action bar.
+batches, effect composition, budget limits and sampled GPU history consumption.
+The GPU sample is asynchronous and distinct from CPU capture and match counts.
+Diagnostics do not use the action bar.
+
+The current phase-five work also adds TAA temporal effects and an effect-resource
+budget to the shared configuration screen and vanilla Video Settings. They persist
+as `aamod_taa_effects` (default `true`) and `aamod_taa_effect_budget_mib` (128–4096 MiB,
+default 2048). Missing or invalid values restore these defaults. Disabling temporal
+effects restores the phase-four combined-world path and releases effect resources.
+Budget-limited layers retain their current-frame contribution; F3 reports the
+affected domains. The budget is not a guarantee that every layer accumulates at 4K.
 
 TAA reconstructs static camera motion from current/previous matrices and world
 depth. Captured entity and block-entity model parts and vanilla baked item/block geometry
 use corresponding previous vertices for translation, rotation, scaling and model
 animation. A separate motion pass checks world depth and texture alpha before
-TAA consumes its vectors. New, unmatched, translucent and custom captured geometry
+TAA consumes its vectors. New, unmatched and unsupported custom captured geometry
 rejects history. FRAPI/Indigo and Sodium extended item/block meshes also receive
 rejection coverage; precise vertex history for those meshes is not implemented.
-ModelPart animation retains precise correspondence with Sodium. Particles, weather and other uncaptured effects retain depth/color
-rejection; residual ghosting or loss of accumulation remains possible. Sky pixels
+ModelPart animation retains precise correspondence with Sodium. With temporal
+effects enabled, standard particles, weather, clouds, flames, leashes, depth-tested
+text and captured translucent geometry use effect motion and independent histories.
+Native transparency sorting and draw order are preserved; conflicting motion and
+unmatched coverage use current-frame content. This phase is still being validated,
+and its complete visual and compatibility acceptance is pending. Sky pixels
 use the current frame. Held items, HUD, menus and later screen effects are not
 accumulated. TAA does not increase render resolution or combine with SSAA.
-History and the RGBA32F motion texture cost 44 bytes per output pixel, about
-87.0 MiB at 1080p and 348.0 MiB at 4K, excluding driver overhead and vertex/uniform/query
-buffers. Capture is limited to 262,144 vertices and 8,192 batches per frame;
+World history and the RGBA32F motion texture cost 48 bytes per output pixel, about
+94.9 MiB at 1080p and 379.7 MiB at 4K, excluding effect resources, driver overhead
+and vertex/uniform/query buffers. Effect histories and composition have additional
+costs described in the phase-five plan. Object capture is limited to 262,144 vertices and 8,192 batches per frame;
 exceeding either budget disables history blending for that frame.
 See [the motion-vector implementation plan](docs/plan/OBJECT_MOTION_VECTORS_PLAN_ZH.md) for
 the reference revision, coverage and validation evidence.

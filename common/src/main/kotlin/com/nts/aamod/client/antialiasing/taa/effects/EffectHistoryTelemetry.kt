@@ -11,6 +11,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 class EffectHistoryTelemetry : AutoCloseable {
     private var target: RenderTarget? = null
     private var readback: GpuBuffer? = null
+    private var pixels = ByteArray(0)
+    private var requestedAt = 0L
     private var completed = AtomicBoolean()
     private var pending = false
     private var pendingFrame = -1L
@@ -38,13 +40,16 @@ class EffectHistoryTelemetry : AutoCloseable {
     var averageWeight = 0.0
         private set
     val allocatedBytes: Long get() = (target?.let { it.width.toLong() * it.height * 4 } ?: 0L) + (readback?.size() ?: 0L)
-    val diagnostic: String get() = when {
-        disabled -> "unavailable"
-        sampledAt == 0L -> "pending"
-        else -> "${sampledKey?.domain} | consumed=$consumedPixels/$coveredPixels" +
-            " | mixed_motion=$mixedMotionPixels" +
-            " | meanWeight=${String.format(Locale.ROOT, "%.3f", averageWeight)}" +
-            " | age=${(System.nanoTime() - sampledAt) / 1000000}ms"
+    fun sampleDiagnostic(): String {
+        requestedAt = System.nanoTime()
+        return when {
+            disabled -> "unavailable"
+            sampledAt == 0L -> "pending"
+            else -> "${sampledKey?.domain} | consumed=$consumedPixels/$coveredPixels" +
+                " | mixed_motion=$mixedMotionPixels" +
+                " | meanWeight=${String.format(Locale.ROOT, "%.3f", averageWeight)}" +
+                " | age=${(System.nanoTime() - sampledAt) / 1000000}ms"
+        }
     }
 
     fun poll() {
@@ -60,19 +65,20 @@ class EffectHistoryTelemetry : AutoCloseable {
             var depthConflict = 0L
             checkNotNull(readback).map(true, false).use { view ->
                 val data = view.data()
-                var offset = 0
-                while (offset < data.remaining()) {
-                    if (data.get(offset).toInt() and 255 > 0) covered++
-                    if (data.get(offset + 1).toInt() and 255 > 0) consumed++
-                    weight += data.get(offset + 2).toInt() and 255
-                    // The shader encodes independent rejection bits in the RGBA8 alpha byte.
-                    val reasons = data.get(offset + 3).toInt() and 255
-                    if (reasons != 0) mixed++
-                    if (reasons and 1 != 0) motionConflict++
-                    if (reasons and 2 != 0) identityConflict++
-                    if (reasons and 4 != 0) depthConflict++
-                    offset += 4
-                }
+                if (pixels.size != data.remaining()) pixels = ByteArray(data.remaining())
+                data.get(pixels)
+            }
+            var offset = 0
+            while (offset < pixels.size) {
+                if (pixels[offset].toInt() and 255 > 0) covered++
+                if (pixels[offset + 1].toInt() and 255 > 0) consumed++
+                weight += pixels[offset + 2].toInt() and 255
+                val reasons = pixels[offset + 3].toInt() and 255
+                if (reasons != 0) mixed++
+                if (reasons and 1 != 0) motionConflict++
+                if (reasons and 2 != 0) identityConflict++
+                if (reasons and 4 != 0) depthConflict++
+                offset += 4
             }
             coveredPixels = covered
             consumedPixels = consumed
@@ -94,7 +100,8 @@ class EffectHistoryTelemetry : AutoCloseable {
 
     fun sample(frame: Long, key: EffectHistoryKey, width: Int, height: Int, availableBytes: Long, draw: (RenderTarget) -> Unit) {
         val now = System.nanoTime()
-        if (disabled || pending || now - lastAttempt < 1000000000L || selected?.let { it != key } == true) return
+        if (disabled || pending || requestedAt == 0L || now - requestedAt > 2000000000L ||
+            now - lastAttempt < 1000000000L || selected?.let { it != key } == true) return
         lastAttempt = now
         attempts[key] = now
         val required = width.toLong() * height * 8
@@ -166,6 +173,7 @@ class EffectHistoryTelemetry : AutoCloseable {
         target = null
         readback?.close()
         readback = null
+        pixels = ByteArray(0)
         pending = false
         pendingFrame = -1L
         accepted = false
@@ -178,6 +186,7 @@ class EffectHistoryTelemetry : AutoCloseable {
         sampledKey = null
         pendingKey = null
         lastAttempt = 0L
+        requestedAt = 0L
         coveredPixels = 0L
         consumedPixels = 0L
         mixedMotionPixels = 0L

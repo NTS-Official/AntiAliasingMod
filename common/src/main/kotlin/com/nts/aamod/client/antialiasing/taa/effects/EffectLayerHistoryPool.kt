@@ -157,28 +157,6 @@ class EffectLayerHistoryPool : AutoCloseable {
         reserved = layers.keys + EffectHistoryPriority.select(reserved - layers.keys, emptySet(), missingCapacity)
     }
 
-    fun reserve(frameId: Long, width: Int, height: Int, domains: Set<EffectDomain>, plan: EffectResourcePlan) {
-        beginFrame(frameId, width, height, plan.budgetBytes)
-        val retained = plan.historicalDomains
-        val retired = layers.filter { (domain, history) ->
-            history.width != width || history.height != height || domain.domain !in retained ||
-                domain.domain !in domains && frameId - history.lastUsed > 16
-        }.keys.toList()
-        retired.forEach { layers.remove(it)?.close() }
-        reserved = reserved.filter { it.domain in retained && it.domain in domains }.toSet()
-        if (retained.intersect(domains).isEmpty()) return
-        for (domain in EffectDomain.entries.filter { it in retained && it in domains }) {
-            acquire(EffectHistoryKey(domain))
-        }
-    }
-
-    fun prepare(
-        domain: EffectDomain, source: RenderTarget, motion: RenderTarget, identity: RenderTarget, conflict: RenderTarget,
-        current: JitterPoint, previous: JitterPoint, samples: Int
-    ): RenderTarget? {
-        return prepare(EffectHistoryKey(domain), source, motion, identity, conflict, current, previous, samples)
-    }
-
     fun prepare(
         key: EffectHistoryKey, source: RenderTarget, motion: RenderTarget, identity: RenderTarget, conflict: RenderTarget,
         current: JitterPoint, previous: JitterPoint, samples: Int

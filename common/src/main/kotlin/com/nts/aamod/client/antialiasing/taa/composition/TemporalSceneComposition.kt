@@ -31,6 +31,7 @@ class TemporalSceneComposition : AutoCloseable {
     private val sortedTargets = linkedMapOf<Identifier, RenderTarget>()
     private var accumulated: RenderTarget? = null
     private var nativeMain: RenderTarget? = null
+    private var nativeRecovery: (() -> Unit)? = null
     private var opaque: RenderTarget? = null
     private var frame = -1L
     private var budget = 0L
@@ -63,7 +64,7 @@ class TemporalSceneComposition : AutoCloseable {
         else sortedTargets[LevelTargetBundle.MAIN_TARGET_ID].takeIf { preparedSorted }
     val activeDomains: Set<EffectDomain> get() = histories.historicalDomains
     val historyBudgetDomains: Set<EffectDomain> get() = histories.budgetRejectedDomains
-    val historyTelemetry: String get() = histories.telemetry.diagnostic
+    fun sampleHistoryTelemetry(): String = histories.telemetry.sampleDiagnostic()
     val rejectedDomains: Set<EffectDomain> get() = captureBudgetDomains.toSet()
     val captureRejections: Map<EffectDomain, EffectRejection> get() = captureDowngrades.toMap()
 
@@ -249,6 +250,19 @@ class TemporalSceneComposition : AutoCloseable {
     fun finishCapture() {
         TemporalCommandCapture.end()
         verifyCaptureBudget()
+        if (output != null) {
+            try {
+                timings.measure(EffectStage.COMPOSE) {
+                    val target = checkNotNull(nativeMain)
+                    nativeRecovery = colors.prepareNativeRecovery(replay.preserveNativeColor(target), target, current)
+                }
+                checkBudget()
+            } catch (exception: Exception) { fail("composition_native_snapshot_failed", exception) }
+        }
+    }
+
+    fun restoreNativeColor() {
+        timings.measure(EffectStage.COMPOSE) { checkNotNull(nativeRecovery).invoke() }
     }
 
     private fun verifyCaptureBudget() {
@@ -295,6 +309,7 @@ class TemporalSceneComposition : AutoCloseable {
         alignment.endFrame()
         timings.endFrame()
         nativeMain = null
+        nativeRecovery = null
         opaque = null
         running = false
         frame = -1L
