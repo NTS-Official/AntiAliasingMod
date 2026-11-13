@@ -10,4 +10,7 @@ interface OptionFieldAccess {
 
     @Invoker("process")
     fun `aamod$processFloat`(name: String?, value: Float): Float
+
+    @Invoker("process")
+    fun `aamod$processString`(name: String?, value: String): String
 }

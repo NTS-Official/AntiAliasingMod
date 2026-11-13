@@ -22,7 +22,8 @@ internal class MotionVectorRenderer : AutoCloseable {
     private var vertices: MappableRingBuffer? = null
     private var uniforms: MappableRingBuffer? = null
     val allocatedBytes: Long
-        get() = target?.let { it.width.toLong() * it.height * 16 } ?: 0L
+        get() = (target?.let { it.width.toLong() * it.height * 16 } ?: 0L) +
+            ((vertices?.size()?.toLong() ?: 0L) + (uniforms?.size()?.toLong() ?: 0L)) * 3
 
     fun render(world: RenderTarget, draws: List<MotionDraw>): RenderTarget {
         allocate(world.width, world.height)

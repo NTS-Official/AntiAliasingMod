@@ -1,10 +1,10 @@
 # 第五阶段：粒子、天气与世界透明效果时域处理完整方案
 
-状态：设计方案，待实现。本文定义第五阶段的最终架构、支持范围、数据契约和验收条件，不是实施顺序或分批交付清单。
+状态：实现中，尚未完成。本文定义第五阶段的最终架构、支持范围、数据契约和验收条件，不是实施顺序或分批交付清单。源码已接通身份／几何捕获、独立历史、原绘制顺序与原版六目标透明合成及设置；完整兼容和整阶段验收仍未完成，进度与证据边界见第 15 节。
 
 第四阶段已在其声明范围内通过工程检查和用户目视验收；用户明确排除了尚未接入的粒子与天气。第五阶段在保留该结果的基础上，为这些内容建立可实际消费的运动信息、独立历史和透明合成路径。仅添加拒绝遮罩、仅增加诊断计数，或把所有效果移到 TAA 之后，都不能视为本阶段完成。
 
-关联文档：[总实施方案](AA_IMPLEMENTATION_PLAN_ZH.md)、[第四阶段时域采样方案](TEMPORAL_SAMPLING_PLAN_ZH.md)、[现有逐物体运动向量方案](OBJECT_MOTION_VECTORS_PLAN_ZH.md)。本文中的新增类名、附件、参数和状态均为设计约定，不表示当前源码已经具备这些能力。
+关联文档：[总实施方案](AA_IMPLEMENTATION_PLAN_ZH.md)、[第四阶段时域采样方案](TEMPORAL_SAMPLING_PLAN_ZH.md)、[现有逐物体运动向量方案](OBJECT_MOTION_VECTORS_PLAN_ZH.md)。本文中的类名、附件、参数和状态描述最终设计，当前落地与验证范围以第 15 节为准。
 
 ## 1. 最终目标与范围
 
@@ -135,6 +135,8 @@ WORLD_RESOLVE 子图
 
 保持原版实际绘制顺序。按连续且可独立表达的混合区间创建合成域，域身份由渲染阶段、输出目标和稳定批次语义确定，不根据当帧排序名次分配历史。
 
+区间的插入、消失或顺序变化不因列表下标移动而清空其它稳定区间。历史按区间键、连续成功帧及逐像素表面对应验证；合成仍严格跟随当帧实际区间顺序。区间自身缺席、材质身份变化或表面无法对应时，沿用相应的帧间断／身份拒绝策略。
+
 对标准 alpha-over，一个区间可表达为 `output = contribution + transmittance * input`。在透明底色目标中按原顺序重放冻结的绘制数据，提取预乘贡献与覆盖；深度测试使用该区间真实入口深度的快照，区间内按原深度写入规则执行。后续区间的入口深度来自原生当前帧流程，不能统一替换成只有不透明物体的深度。
 
 最终以相同区间顺序在稳定世界背景上合成。加色区间保留自己的混合类型和源系数；其衰减为 1，不能用普通 alpha-over 错误遮暗背景。会读取目标颜色、使用未知折射或不可重放状态的区间不满足该契约，必须显式降级。
@@ -172,7 +174,7 @@ WORLD_RESOLVE 子图
 - 云：根据原版实际云平移和相机偏移重建前后世界位置；使用稳定网格坐标、表面与重建世代标识。云质量、颜色／形状资源或网格拓扑改变时更新外观响应或历史世代。云单独拥有深度和历史，即使背景是深度为 0 的天空也不跳过云解析。
 - 绳索：以拥有者和稳定分段标识对应前后实际分段顶点，包含两端移动与弯曲变化。分段数／拓扑变化使对应失效，不用实体中心速度代替整条绳索。
 - 火焰：跟踪面片几何、所属对象和实际动画帧，利用 alpha 覆盖及外观响应限制历史。几何稳定不代表火焰纹理静止；不承诺无对应信息的动画 texel 精确运动。
-- 世界文字：对参与世界深度测试的字形按拥有者、文本版本、字形和绘制层匹配。字体资源、文本和布局变化局部失效；see-through／always-on-top 文字遵循原后置路径，不纳入本阶段世界历史。
+- 世界文字：对参与世界深度测试的字形按拥有者、文本版本、字形和绘制层匹配。字体资源、文本和布局变化局部失效。`SEE_THROUGH` 显示文字及名称标签仍在原版 `executeTranslucent` 阶段绘制，保留原位置、混合和遮挡规则；不生成字形历史对应，相关贡献仅使用当前帧并去 jitter，不移到最终解析之后。真正的 `alwaysOnTop` 提交在解析之后使用未抖动投影绘制，独立 UI 不进入世界历史。
 - 水、玻璃及透明实体：作为排序参与者保留真实输出目标、深度与混合规则。静态几何可用相机对应，动画纹理有独立响应；实体复用现有几何运动。FRAPI／Sodium 扩展网格只有覆盖时仍标为对应无效，不因进入独立层而宣称新增精确顶点支持。
 
 ## 7. 独立历史与颜色约定
@@ -193,7 +195,11 @@ WORLD_RESOLVE 子图
 
 每个域先选出与当前可见代表表面一致的运动和身份，再统计其它有效贡献的覆盖、深度跨度、运动分歧及身份冲突。代表运动可由实际贡献及深度决定，但不能把不同速度加权平均后标为精确对应。发生明显冲突时降低或拒绝该像素的域历史；背景自己的历史继续有效。
 
+透明模型另保留当前帧的拥有者分组，与逐面的历史 token 分开。身份和拥有者附件以运动 pass 选出的同一份代表深度做硬件 `EQUAL` 测试，不能用深度容差让后面的另一面覆盖代表身份。同一模型中，只有当前与前帧对应均可靠的表面可以共享一致运动；仍逐像素检查运动分歧，形变／视差不能因同属一个模型而跳过。不同模型、无拥有者声明和不可靠表面继续检查身份与深度跨度；历史重建始终核对原来的逐面 token，不把同一模型的不同面混作同一历史身份。分组 ID 仅在当前 pass 内分配，不进入持久历史，也不对实例身份做有碰撞的哈希截断。
+
 该约束明确承认原版目标内部多层混合的信息限制：单个粒子或一致运动区域必须实际积累；多烟团交叉、不同速度叠加和覆盖急变区域允许保守拒绝。不能把整张粒子／天气目标永久设为拒绝，再宣称时域接入完成。
+
+冲突拒绝必须随历史保存，不能只判断当前帧。历史身份附件保留原始采样网格中的逐面 token，并把对应不可靠或运动／身份／深度冲突的像素信任度置零；历史颜色重建逐 tap 核对该信任度。冲突消失后先提交干净的当前帧，再恢复相应区域的历史消费，避免把上一帧已经混合了其它运动的颜色重新当作可靠历史。
 
 当前覆盖与前帧覆盖都参与消失判断。出生／死亡 token、前帧投影覆盖及当前可见性用于识别新出现和已消失内容；历史只能在仍存在的表面和当前重建支持区域内延续。粒子死亡或天气关闭时不允许仅凭旧颜色继续生成覆盖。
 
@@ -209,6 +215,8 @@ WORLD_RESOLVE 子图
 
 在修改原版目标前完成能力检查、管线预编译和资源预留。运行中失败时，使用保留的原生当前颜色执行一致的空间去 jitter 输出，并放弃当帧新历史；不能裸输出仍抖动的原始画面。后续帧进入明确降级／暂停状态，避免每帧失败、分配和重试。
 
+不支持的目标／混合／目标读取、冻结绘制契约错误及管线异常保持失败状态，直到现有历史或资源失效入口重置。保持降级期间停止效果几何捕获、干净世界快照及效果资源初始化，原生当前帧继续去 jitter 输出。历史／捕获预算不足、暂时缺失的效果来源或合成输入允许后续帧重新评估；不能把永久能力缺失和可恢复的当帧条件混为一类。
+
 ## 10. GPU 资源、内存与性能预算
 
 各域逻辑上独立，物理资源由池管理。当前运动和遮罩可按域顺序生成、解析并复用 scratch；已解析颜色和对应当前排序深度必须保留到最终合成结束。空域不创建历史，长期空闲域回收。
@@ -217,14 +225,14 @@ WORLD_RESOLVE 子图
 
 | 资源 | 设计格式／内容 | 字节／像素 |
 | --- | --- | --- |
-| 现有世界 TAA 与对象运动 | 现有历史、原始颜色和 RGBA32F 运动 | 44 |
+| 世界 TAA 与对象运动 | 双槽 RGBA16F＋D32 历史 24、双槽 RGBA8 原始颜色 8、RGBA32F 运动 16 | 48 |
 | 每个域的历史槽，双缓冲 | 每槽：RGBA16F 解析颜色 8、D32 效果深度 4、RGBA8 原始颜色 4、RGBA8 token／信任度 4 | 每域 40 |
-| 共用当前域 scratch | RGBA32F 运动 16、RGBA8 响应性 4、RGBA16F 贡献统计 8、RGBA16F 颜色重建 8 | 36 |
+| 共用当前域 scratch | RGBA32F 运动 16、独立代表表面 D32 深度 4、RGBA8 响应性 4、RGBA8 当前拥有者 4、RGBA16F 贡献统计 8、RGBA16F 颜色重建 8 | 44 |
 | 干净世界快照 | RGBA8 颜色＋D32 深度 | 8 |
 | 合成输出 | RGBA16F | 8 |
 | 原生失败恢复颜色 | RGBA8 | 4 |
 
-以各域均占满屏幕估计，表内自有附件基线为 `100 + 40 * activeHistoryDomains` 字节／输出像素，不含原版透明目标、对齐、额外深度视图、顶点／uniform／query 和驱动成本，不能当作完整显存上限。五个域同时存在时为 300 字节／像素，1080p 约 593.3 MiB，4K 约 2373.0 MiB；不能继续引用第四阶段的 44 字节／像素作为完整成本。
+以各域均占满屏幕估计，表内自有附件基线为 `112 + 40 * activeHistoryDomains` 字节／输出像素，不含原版透明目标、对齐、额外深度视图、顶点／uniform／query 和驱动成本，不能当作完整显存上限。五个域同时存在时为 312 字节／像素，1080p 约 617.0 MiB，4K 约 2468.0 MiB。独立代表深度用于天气等原生不写深度的效果身份选择；它不替代原生当前排序深度。第四阶段记录的 44 字节／像素属于当时单槽原始颜色的历史数据；本阶段为保证中止不覆盖已提交原始颜色而改成双槽，不能继续将旧值当作当前成本。
 
 深度对齐和临时附件应在 lifetime 不重叠时复用；无法复用的实际资源必须加入账本，尤其是原绘制顺序后端各区间入口深度快照。非 RGBA8 原始层应提高存储格式并更新成本，不能静默压缩 HDR。Blaze3D 不支持某种独立附件用法时允许采用 RenderTarget 包装，但多出的深度纹理必须计费。
 
@@ -296,14 +304,14 @@ assets/aamod/shaders/post/           效果运动、响应性、解析和对齐 
 
 ## 14. 验证矩阵与完成门槛
 
-本节是整套最终方案的验收条件，没有先后交付含义。实现时应为每项补充入口、环境、结果和证据位置；当前全部为待实现／待验证。
+本节是整套最终方案的验收条件，没有先后交付含义。实现时应为每项补充入口、环境、结果和证据位置；部分基础检查已有证据，但尚无整项通过，第 15 节分别记录。
 
 | 编号 | 检查 | 必须证明的结果 |
 | --- | --- | --- |
 | E01 | 身份与渲染时钟 | 高 FPS／低 TPS、暂停恢复、重排、出生死亡、实例复用和断帧不会错误对应 |
 | E02 | 粒子运动 | 平移、billboard 相机旋转、roll、缩放、纹理切帧与特殊粒子组实际四角对应；GPU 验证方向和深度 |
 | E03 | 天气图案运动 | 相机静止时滚动雨雪也有正确图案运动；相位回绕、多周期时间差、跨列和雨雪切换正确 |
-| E04 | 云及其它效果 | 云平移／重建、绳索形变、火焰帧变化、文字替换与后置文字边界有对应证据 |
+| E04 | 云及其它效果 | 云平移／重建、绳索形变、火焰帧变化、文字替换／透视文字隔离与后置绘制边界有对应证据 |
 | E05 | 独立历史真实消费 | 背景静止、粒子移动及相反运动背景的受控输入中，分别读回各层历史贡献；不能只有计数增长 |
 | E06 | 预乘与消失 | alpha 渐变、纹理孔洞、淡烟、加色、粒子死亡及天气关闭，无黑边、重复乘 alpha、背景遮暗或历史复活 |
 | E07 | 同域多运动 | 两团反向运动烟雾、不同深度粒子交叉时冲突拒绝有效；单独可靠粒子仍能积累 |
@@ -322,4 +330,343 @@ E05／E07 要覆盖正常默认负载下的实际历史消费：仅有遮罩、�
 
 工程检查在隔离客户端和 GPU 场景进行。用户观察客户端的设置、世界、镜头和生命周期由用户控制；不自动切参、截图、传送、重载、重启或关闭。五种序列的工程回归可以隔离执行，但不能替代用户固定一套设置的长时间观察。
 
+测试边界：生产源码不加入测试入口、夹具、测试计数器、特定环境开关或只为满足验收而存在的分支；必要的 CPU／GPU／客户端验证放在独立临时工具和隔离进程中，不参与源码集、发布包或运行时业务路径。F3 中的历史消费、资源预算和阶段耗时属于正式诊断信息，不是测试钩子。业务代码中的 `check`、资源预算检查和失败回退只服务于运行时契约与资源安全；没有明确业务语义的防御性断言不应添加，更不能借断言替代隔离验证。
+
+验证按具体改动和明确疑点选取最小有效范围，不机械扩展加载器、后端、序列和样本数的所有组合。已有检查通过后，只有新的代码变更、失败或未解决问题才触发相关复测；不为增加断言数、截图数或日志数量重复运行。构建、打包核对、算法对照与用户目视验收分别记录，不能互相冒充。
+
 共享实现变更使用进程内 JDK 25 构建 Fabric 与 NeoForge，保留系统默认 JDK 27。发布包需核对新增 mixin／shader／翻译、可选依赖隔离和无验证代码。第五阶段只有在上述架构功能、两种透明后端、预算行为、双端工程证据及用户画质确认全部满足后，才能标为完成。
+
+## 15. 实现进度与证据边界
+
+以下是 2026-11-10 工作树中的阶段记录，不代表已发布能力。已增加干净世界解析、实际原顺序贡献区间、六目标合成及最终一次锐化的整帧接线，保留关闭效果选项的第四阶段路径。两种后端已有双端实际世界运行证据，但各效果的完整交错、兼容、性能和用户长期观察门槛仍未完成；不能将 CPU 对应计数、独立 shader 通过或双端编译成功当作第五阶段视效完成。
+
+已增加的基础包括 `taa/effects/` 的弱引用实例身份、成功渲染帧快照、billboard 四角、天气列实际 UV 相位、原顶点透传捕获、批量运动／身份／冲突绘制、独立域双槽历史及预算计划；`TaaResolve` 已拆分 prepare／present／commit／abort，原始颜色双缓冲。效果开关与预算通过共享页面、原版视频设置和 Options 保存。设置回调不分配 GPU 资源。
+
+已依据 26.2 原版字节码核对雪柱公式：`uOffset` 和 `vOffset` 都包含基于 `ticks & 131071` 的随机连续漂移，`vOffset` 另含 `-((ticks & 511) + partialTick) / 512` 下落项。雪纹对应从实际 `vOffset` 减去当前 131072 tick 周期内已经过的完整 512 tick 周期数，只解开整数回绕，保留下落与随机漂移；131072 tick 掩码断点使用独立世代拒绝旧图案。列身份仍由 XZ 和降水类型确定，不使用变化中的 UV 位模式。先前相加当前 512 tick 相位的写法会抵消真实下落，现已移除。
+
+文字显示实体在本版本中通过 `OrderedSubmitNodeCollector.submitText` 延迟提交字形，实际字形捕获发生在 `TextFeatureRenderer.buildGroup`，拥有者由 Submit 构造时继承当前实体身份；并非在 `submitInner` 中直接绘制。已移除该外层无效文字作用域，普通背景仍使用专门的稳定几何适配，透视文字保留原透明阶段的当前帧贡献。编译器对最终 Submit 类与动态 Mixin 接口交叉类型的推断通过在提取字形数据后再读取拥有者解决，不加入运行时特殊分支。
+
+另核对了实际 `LevelRenderer.addAlwaysOnTopPass` 和 `PreparedRenderType.drawFromBuffer` 字节码：后置阶段不会自行恢复未抖动投影，绘制时仍通过 `RenderSystem.bindDefaultUniforms` 绑定当前投影。现以 `AlwaysOnTopProjectionMixin` 包裹 `LevelRenderer.addAlwaysOnTopPass` 注册的实际世界绘制回调，只在已注入 TAA 投影的帧内，使用实际世界投影左乘逆 jitter，绘制结束在 `finally` 中恢复原投影缓冲及类型。该作用域不再包裹通用 feature dispatcher，避免介入手持物及界面的独立投影。独立投影缓冲纳入资源统计并随 TAA 失效关闭。该边界针对原版 `submitGizmoPrimitives(..., true)` 等真正的 `alwaysOnTop` 提交，不覆盖 `SEE_THROUGH` 文字；普通及透视显示文字、普通及透视名称标签均在 `executeTranslucent` 内执行。先前将透视文字描述为后置内容的结论有误；真正后置绘制已有下述 Fabric 原版 OpenGL 运行时证据，其余兼容范围不据此自动通过。
+
+原版后置 gizmo 的几何仍在统一 feature 准备阶段生成，不能只在执行阶段处理投影。已用 `AlwaysOnTopSubmitMixin` 在原版真实后置分支标记对应 Submit，并由 `GizmoMotionMixin` 在该组准备期间暂停物体及效果捕获；普通世界组继续捕获。标记使用帧内实例身份集合，帧末清空，不按文字材质或类名猜测是否后置。
+
+已修正效果合成失败时的提交边界：回退仅以零历史权重解析原生当前帧并输出去 jitter 结果，随后中止世界历史事务，同时清除物体历史和相机连续状态；不会再把回退后的组合世界提交为独立不透明世界历史。效果关闭时仍采用原第四阶段正常提交路径。这是运行时原子性修复，不表示全部失败点的 GPU 场景已验收。
+
+效果预算已按配置说明与世界基础资源分开：`TaaMethod.worldAllocatedBytes` 包含世界解析、物体运动和后置世界投影缓冲；`effectAllocatedBytes` 包含干净世界快照及效果合成器，二者相加仍是自有附件／缓冲总计。合成器预算回调只计入其外部的干净世界快照，不再扣除世界 TAA 和物体运动资源。F3 同时显示世界、效果和总计，效果预算不足不会因为基础世界资源占用而提前触发整帧回退。
+
+独立效果解析在分配运动附件和上传缓冲前计算实际新增需求，先确认该区间的历史槽与工作区能够同时容纳。准入复用既有域优先级、驻留优先和确定区间键；不能满足当前区间，或需要释放当帧仍待提交的历史时，仅拒绝当前区间，不先清空其它域。通过准入才分配运动工作区；拿不到历史槽的效果直接以原生当前帧贡献合成。帧初只为尚未创建的运动附件预留空间，已有附件不再次扣费。整帧最低合成资源本身无法满足时仍使用原有失败回退，不能把两种预算条件混为一类。
+
+当前效果外观快照还会保存实际逐顶点 alpha。粒子、模型、方块实体、地形、文字、绳索、火焰和天气在历史对应时比较 alpha 渐变；小幅变化降低历史置信度，顶点数量或布局变化直接拒绝对应，避免淡出／消失表面继续消费旧历史。共享代码已用进程内 JDK 25 完成 Fabric／NeoForge Kotlin 编译；这只是业务修复与编译证据，不代表 E06 或第五阶段整项验收完成。
+
+动画外观版本现按实际采样的 sprite 跟踪：`SpriteAnimationBindingMixin` 将原版动画状态关联到 `SpriteContents`，`AtlasAnimationMixin` 只在该状态完成实际图集绘制后推进其版本，不再在每次整张图集 tick 时统一推进。模型、普通粒子、火焰、原版与 Sodium 透明地形均按面片实际 UV 覆盖的动画 sprite 汇总版本；静态 sprite 不继承无关水纹或火焰的更新。地形缓存每面关联的动画内容，模型及其它动态 UV 在实际捕获时确定覆盖范围。未知或本来不可靠的几何仍保持原有拒绝语义，外观版本修复不把它升级成精确运动。
+
+独立场景还发现上传池在请求尺寸缓慢增长时不断跳过旧页并追加恰好大小的新页，长期运行会耗尽页数。`TemporalUploadArena` 现对本帧尚未使用的不足页按容量档位扩容并关闭旧环形缓冲；本帧已经上传的页仍不覆盖。预算预测计入实际扩容差额，帧结束继续轮换已使用的三槽缓冲，关闭时释放全部页。这是实际资源生命周期修复，专用增长负载验证仍留在 TEMP。
+
+未归属模型顶点原先只进入世界运动拒绝，未向独立透明层提供覆盖。现将 `MotionCapture` 中无可靠 Submit／局部几何对应的完整批次接入 `ModelEffects` 的不可靠捕获，保留实际材质、UV、alpha 和原生绘制来源；没有稳定对应的批次使用当帧身份、零置信度，不生成精确顶点历史或模型共同运动组。专用 `EffectQuadConsumer` 标记已由效果适配器捕获的底层消费者，避免字形等几何被重复添加为不可靠模型。此处标记只表达真实捕获归属，不是验证入口或测试开关。
+
+临时验证程序位于 `%TEMP%/aamod-effects-check`，不进入源码集或发布包。最新 CPU 检查输出 `EFFECTS_CORE_CHECK_PASSED assertions=10418`，冻结绘制状态检查输出 `EFFECTS_COMPOSITION_CORE_CHECK_PASSED assertions=1062`，隐藏 OpenGL 场景输出 `EFFECTS_GPU_KERNEL_CHECK_PASSED assertions=216`，见 `terrain-verified-gpu.log`。CPU 检查覆盖三角条带交替绕序／尾部边界、不可靠前帧拒绝、整域预算／来源拒绝的中止与恢复、稳定历史优先级，以及 Sodium compact 顶点的位置／UV 偏置／section 身份／零长度分段／不可变上传快照。冻结状态检查覆盖同管线不同纹理与 mip 的区间隔离、相同材质的分离上传批次、原生 builder 复用与帧末归属释放、冻结原生扩展状态的绑定顺序，并直接调用 Sodium 实际编码器生成 100 组网格验证解码。GPU kernel 程序运行新效果 shader 和从 Minecraft jar 读取的实际 `transparency.fsh`，夹具为 RGBA32F；它不覆盖 Minecraft 原生 RGBA8 后处理链、Blaze3D 调度、Vulkan 或实际世界。
+
+另外已增加 Blaze3D 实际冻结绘制重放、原版六目标后处理链桥接、当前排序深度对齐和不透明世界快照。Fabric 隔离客户端曾完成 30 组原生 RGBA8 六目标两遍后处理对照，随后在原绘制顺序重建对照中发现空贡献 alpha 错误：JOML `Vector4f()` 默认为 `(0,0,0,1)`，不能用来清空透明贡献／信任度／冲突附件。相关清屏已显式改为四分量零，后续双端隔离 GPU 对照通过；实际世界证据仍未补齐，不计作 E08／E10 整项通过。
+
+清屏修复后的双端隔离场景曾各输出 `EFFECTS_BLAZE3D_COMPOSITION_CHECK_PASSED assertions=2118`，覆盖原生透明链、冻结几何中深度写入／深度阻挡／加色、当前排序深度对齐、干净快照、独立代表深度、实际效果历史颜色／覆盖消费、中止和释放。随后增加完整 `TemporalSceneComposition` 对照，暴露六目标连续处理在同一 GPU 提交内循环复用三槽上传缓冲的问题；已改用帧内分页上传、帧末轮换。最新双端各输出 `EFFECTS_BLAZE3D_COMPOSITION_CHECK_PASSED assertions=3689`，包含 30 组完整六目标组合与原生链对照、完整原顺序组合与原生绘制对照、预算失败保持原生颜色及全部自有资源释放，并补充不透明粒子世界运动、实际材质背面剔除和逐顶点 alpha cutout。证据见 `material-gpu.log`；双端实际 mixin 启动检查均通过。这不覆盖 Vulkan 或完整实际世界交错。
+
+实际世界已有独立粒子历史的异步 GPU 权重读回：此前两端六目标路径各完成 30 次采样，其中各 29 次测到非零消费；原顺序路径最新 `text-material-world.log` 两端分别完成 30／31 次有效采样、19／18 次非零消费。此处次数是每秒读取的工程样本数，不是历史样本周期或整项验收数。新建的隔离效果世界只生成固定两头牛、火焰、拴绳和文字显示实体，旧夹具实体会清理，避免重复运行累积实体。观察客户端未被操作。
+
+火焰、拴绳、云、普通名称标签及文字显示实体的实际几何捕获均已出现。文字多目标 mixin 的 `@Shadow` 显式关闭 remap 后才真正应用；文字投影已补原材质的 layering／UV 变换及逐顶点 alpha。新隔离世界普通 `text` 与 `text_polygon_offset` 区间分别有非零 GPU 消费证据，不再仅依据捕获数量判断。透明模型复用现有 MotionCapture 几何，保留 owner 身份并按面保存裁剪坐标，未再次提交原生几何；任意自定义几何仍需可靠性契约。文字显示实体的普通背景现通过专门的 `StableCustomGeometry` 适配声明局部顶点顺序，仍逐帧核对局部几何；透视背景不作此声明。`native-batch-world.log` 两端均完成 31 次有效采样、24 次非零消费，各有 6 次明确来自文字背景自身区间。还未以专门移动透明实体／拾取场景证明 E09。
+
+`feature-transitions-vanilla-ordered-world.log` 在双端原版 OpenGL 原顺序路径完成实际效果局部变化检查，整体 `BUILD SUCCESSFUL`。移动被拴生物后，两端各检测到 96 个扣除 jitter 后实际投影位置改变的绳索分段；同时各有 3 个火焰面片的实际 atlas 动画版本变化。随后替换文字显示实体内容，确认其原有拥有者的外观版本改变；切成 `SEE_THROUGH` 后，该拥有者的 TEXT 快照消失，恢复深度测试后重新出现。全过程世界 epoch 不变且世界历史保持 16 帧。该记录证明捕获与局部外观生命周期，不代替绳索／火焰的 GPU 方向读回、透视文字当前帧贡献与真正后置提交边界或其它后端组合。
+
+云原顺序场景将观察点固定在云层下方并使用 12 区块云距离，两端各 31 次有效采样、30 次云域非零消费，证据为 `cloud-visible-world.log`。较早使用 4 区块云距离的场景中云在视野外，零覆盖检查失败，不计为通过。雨原顺序场景两端各有 15 次明确天气域非零消费，证据为 `rain-world.log`。雨雪纹理类型需单独确认；最早名为 `snow-sorted-world.log` 的夹具因 fillbiome 超过原版体积限制，实际仍是雨，不能计作雪的证据。
+
+修正生物群系填充范围后，`snow-texture-sorted-world.log` 明确要求实际捕获的天气快照材质为 `textures/environment/snow.png`，缺少该纹理即失败；两端六目标路径均完成 31 次有效采样、15 次天气域非零消费，并通过纹理身份检查。此证据只覆盖固定镜头下的滚动雪纹，不包含跨雨雪切换、遮挡和关闭恢复。
+
+`weather-lifecycle-ordered-world.log` 已在双端原版 OpenGL 原顺序路径完成晴→雨→雪→雨→晴，整体 `BUILD SUCCESSFUL`。每次恢复降水均核对实际快照纹理，且只接受切换开始一秒之后的新 GPU 样本；Fabric 的三次天气域消费分别为 1354／48402、346／20091、1716／52884，NeoForge 为 1529／42360、256／19702、1190／51982。两次晴天均确认天气快照为零、WEATHER 驻留历史释放、世界历史保持 16 帧；切换全程世界 epoch 不变。该检查补充了天气启停与雨雪切换证据，尚不覆盖屋顶遮挡、跨列运动、六目标或 Vulkan 天气生命周期。
+
+普通名称标签在 `executeTranslucent` 阶段，应参加世界效果处理；`SEE_THROUGH` 字形已单独排除。`alwaysOnTop` 在最终解析之后执行，不能将所有名称标签统称为后置内容。仅按捕获时间判断不足以替代原生阶段归属，未知后置提交还需进一步验证。
+
+当前原顺序历史池按 `(域, phase, target, material, occurrence)` 独立，捕获结束立即重放，最终输出前保持原生目标颜色供失败恢复。六目标路径在原版链之前的 framegraph 读依赖中准备独立输入，并再次执行实际原版链；原版链仍保留，最终世界解析入口只在整套结果成功时输出新合成。帧内上传页、额外六个对齐目标和重放 scratch 均纳入自有资源计数；第 10 节基线不能替代这些实际分配。当前两种后端的附件上限不同，六目标路径还持有每像素 48 字节的六份 RGBA8＋D32 对齐输入。
+
+区间材质键现包含实际管线对象、拓扑、纹理资源／mip／采样器身份；布局变化仅失效当前键，不再每次清空其它粒子／云的历史。GPU 诊断按活跃区间轮换取样，避免首个透明区间独占采样。`NativeEffectDraws` 已对原生 StagedVertexBuffer 建立帧内 builder → Draw → ExecuteInfo 归属：模型／字形对应还核对顶点与索引资源、baseVertex、firstIndex、indexCount；同一材质的另一批次不能提前消费当前几何。原生 builder 复用后，已返回捕获 wrapper 保留原来的批次归属。非 staged 的特殊路径仍需各自核验。
+
+水和玻璃已增加地形独立运动／覆盖提取：原版从实际 BLOCK 上传快照捕获，按实际执行批次及视图／区块原点投影；Sodium 0.9.2 由隔离适配器解码实际 compact 顶点，核对可见 section／面掩码，按其实际矩阵、UV 收缩和淡入状态生成对应。两个路径均按面判断动画 atlas，静态玻璃不因水纹切帧整体失效；重建更新身份，仅索引排序不更新身份。网格缺失／不完整拒绝透明域历史，并保留原生完整贡献。CPU 网格缓存使用弱引用并限制各自 64 MiB。此前原版双端两种透明后端已有地形捕获与非零消费，但确定性玻璃／水容器夹具修改后的原版回归仍需补齐。
+
+Sodium 的 region 平移、原生时钟和 region ID 不经过 RenderPass uniform API，已用冻结扩展状态保存，并在重放管线绑定后恢复 OpenGL uniforms／Vulkan push constants；来源匹配绑定同一原生 region 绘制状态。`terrain-verified-gpu.log` 的双端实际 Blaze3D 对照各通过 4316 个断言，新增原生 GL 状态被覆盖后重放结果逐通道完全一致检查；包含此前 3779 个断言中的晚到捕获溢出整帧中止、下一帧仅受影响域降级、原生预乘合成、实物预算优先级和缩容。
+
+随后 `vulkan-native-gpu.log` 在实际 NVIDIA Vulkan 后端完成双端各 4331 个断言：浮点／深度读回改走跨后端复制，Sodium 原生状态夹具直接写入原生 20 字节 push constants，再用冻结状态重放，逐通道完全一致。新增失败注入检查证明管线错误跨三帧保持锁存、不再分配额外合成资源，单纯重置历史不重试，明确生命周期复位后恢复；临时预算失败仍可在下一帧恢复。这项检查早于新增分项计时实现，不据此声称计时检查通过。
+
+Vulkan 实测暴露了效果 shader 变体声明与绑定布局不一致：未使用的 `LayerDepth` 等 sampler 在 Vulkan 反射中仍需绑定，权重变体也不能声明或引用未绑定的 `HistorySampler`。现按实际分支同时裁剪声明和使用；`vulkan-weights-world.log` 中 Fabric 原顺序路径 31 次有效采样、16 次透明域非零消费、23 次任一域消费，`vulkan-sorted-world.log` 的 Fabric 六目标路径同为 31／16／23，并出现粒子域实际权重读回。`vulkan-neo-sorted-world.log` 已完成 NeoForge 六目标实际世界检查；其精确计数以日志为准。NeoForge 最早的 Vulkan 检查停在 `glfwCreateWindowSurface → Window.bootCrash → tinyfd_messageBox`，尚未进入 AA 渲染；只在临时实例的 `fml.toml` 关闭 `earlyWindowControl` 后启动与 GPU／世界检查恢复。没有修改项目默认启动配置或用户客户端设置；原先双任务日志整体失败，不能按整批通过记录。
+
+`sodium-terrain-fade-world.log` 中，确定性隔离场景包含玻璃墙、水容器及前后烟雾，Fabric／NeoForge 原顺序路径各 31 次有效采样，其中透明地形域分别 12／9 次非零 GPU 消费，所有效果任一域分别 21／19 次非零消费。最早 `sodium-terrain-ordered-world.log` 因 mixin remap／继承字段定位错误而没有捕获地形，`sodium-terrain-pass-world.log` 又因未继承重建前原生淡入时间导致后续拒绝，均为失败证据，不计入通过。NeoForge 的 Sodium 实现位于内嵌 jar，转换器另用 compile-only 的平铺 Sodium 类路径；该依赖不进入运行时或发布包。`terrain-verified-gpu.log` 已在无 Sodium 默认运行时完成两端构建和实际 mixin／GPU 启动回归，输出全部位于临时目录，既有发布 jar 未覆盖。
+
+Sodium 替换的云网格改为读取最终原生三字节面缓冲。`sodium-cloud-ordered-world.log` 双端各 31 次有效采样、各 28 次云域消费；`sodium-cloud-sorted-world.log` 两端云域分别 29／30 次消费。`sodium-particle-ordered-world.log` 两端各 31 次有效采样，任一域分别 27／15 次非零消费，并出现明确粒子域读回。这些 Sodium 检查早于最终云缓冲不完整拒绝保护，仍需相应回归。保护加入后的原版原顺序云场景已在 `vanilla-cloud-hidden-world.log` 完成双端回归：两端各 31 次有效采样，云域分别 30／29 次非零消费。验证窗口隐藏并释放鼠标，固定为 640×360，不操作用户观察实例。
+
+`stage-polled-gl-gpu.log` 与 `stage-sampled-vulkan-gpu.log` 分别在实际 OpenGL／Vulkan 下完成双端各 4345 个 Blaze3D 断言，均整体构建成功。它们包含新增的分项时间戳检查；计时池采用跨后端 API，按帧抽样并延迟读取。当前公开的 CPU submit 时间只包含合成器自己的提交区间，不等于完整 CPU 效果提取成本；GPU 分项为 replay／motion／resolve／compose，不能用它们代替总帧时间或 E14 分辨率基准。
+
+`lifecycle-vulkan-world.log` 已在双端 Sodium＋Vulkan 实际世界完成生命周期检查，初始为原顺序后端。检查依次切换至六目标再返回，断言 epoch 更新且旧六目标布局释放；效果 OFF 时合成／干净快照资源归零且第四阶段世界历史恢复至 16；AA OFF 时世界／效果／对象运动／上传／时间戳资源归零；800×450 再回 640×360 时核对实际附件尺寸；资源重载提升 epoch；暂停恢复后继续解析；断开世界后资源归零。两端均输出 `EFFECTS_ACTUAL_LIFECYCLE_CHECK_PASSED`。此项不替代其它后端、画质预设或 Iris 光影启停验证。
+
+确定性玻璃墙／水容器场景的原版原顺序回归已补齐：`vanilla-terrain-deterministic-world.log` 双端各 31 次有效采样，透明地形域分别 15／10 次非零消费，任一效果域分别 23／19 次消费。六目标与透明实体交错对照仍需补齐，不能将此记录推广为 E09 完成。
+
+同一确定性场景的六目标路径现已补双端回归：`terrain-deterministic-vanilla-sorted-world.log` 中原版 Fabric／NeoForge 分别有 31／30 次有效样本，透明地形域非零消费 12／14 次，任一效果域消费各 21 次；`terrain-deterministic-sodium-sorted-world.log` 中 Sodium 两端各有 31 次有效样本，透明地形域消费 11／16 次，任一效果域消费 20／23 次。两批均整体 `BUILD SUCCESSFUL`，实际提交快照中有确定性水／玻璃地形；这些证据只证明场景接线与消费，尚无完整透明实体交错及背景独立性的像素对照。
+
+核对原版四种粒子组后，已为 `ELDER_GUARDIANS` 增加粒子→专属模型→提交拥有者关联，复用现有 `ModelPart` 几何捕获。弱身份注册使用粒子，避免以模型为弱键而被提交历史中的模型引用反向保活。`guardian-isolated-ordered-world.log` 已捕获实际 `guardian_elder.png` 表面，但 Fabric 的独立材质区间在 30 秒中仅两次读到非零消费且像素数很低，未通过原有消费检查；这不是特殊粒子验收通过的证据。模型自身透明表面重叠与冲突拒绝仍需定位和验证。最初 `guardian-ordered-world.log` 另有夹具纹理名称写反的问题，不能把其 `capture=false` 当作生产捕获失败。
+
+新增 `mixed_motion` GPU 像素统计，复用权重读回纹理的 alpha 通道标记实际解析中因同域运动／身份／深度冲突而拒绝历史的覆盖像素；现用该 RGBA8 alpha 字节的 1／2／4 位分别记录三种原因，组合原因可并存，读回大小不变。正常单面、身份冲突、运动冲突及消失输入的 shader 检查曾通过，`pickup-id-ordered-world.log` 输出 `EFFECTS_GPU_KERNEL_CHECK_PASSED assertions=236`；新增原因位后的 `guardian-conflict-reasons-world.log` 输出 246 个断言。该数值仍属于独立 OpenGL kernel 夹具，不代替实际模型场景或 Vulkan 检查。
+
+`guardian-conflict-reasons-world.log` 双端实际世界消费检查失败：Fabric 为 0 次、NeoForge 为 1 次。一次 Fabric 读回的 42865 个覆盖像素中，身份冲突 40247、深度跨度冲突 36728、运动差异冲突 0；一次 NeoForge 读回的 41741 个覆盖像素中，身份冲突 33972、深度跨度冲突 30465、运动差异冲突 0。该结果支持修正模型自身多个表面的身份／深度冲突归属，不能通过降低原有消费门槛来宣告完成；后续修正仍需实际模型场景与双后端回归。
+
+模型分组和代表身份修正后的 `model-coherence-opengl-gpu.log` 已通过双端构建、10418 个 CPU 对应断言、1062 个冻结状态断言、246 个 OpenGL kernel 断言及双端各 4365 个实际 Blaze3D 断言。新增实际 GPU 对照包含相邻后表面不能通过旧深度容差覆盖代表身份、同一模型一致运动不误拒绝、不同模型继续隔离、不可靠后表面不继承信任度、同一模型形变／视差仍拒绝。`model-coherence-vulkan-gpu-fixed-fixture.log` 在双端 Sodium＋Vulkan 同样各通过 4365 个断言；较早同名无 `fixed-fixture` 日志因临时天气夹具误用旧版方法名而编译失败，不属于生产渲染失败。
+
+`guardian-coherence-ordered-world.log` 在双端原版 OpenGL 原顺序路径分别完成 16／15 次幻影自身区间的非零 GPU 消费，整体运行成功。典型 Fabric 采样为 43270／46452 个覆盖像素实际消费（约 93%），典型 NeoForge 为 50549／54965（约 92%）；该修复没有降低运动分歧阈值，也没有将逐面历史身份合并。后续夹具另增加至少三次独立采样中过半覆盖实际消费的断言，该加强断言不能提前记作已经运行通过。
+
+加强断言现已在 `guardian-coherence-sodium-vulkan-sorted-world.log` 的双端 Sodium＋Vulkan 六目标实际场景运行通过，整体 `BUILD SUCCESSFUL`。Fabric／NeoForge 分别有 15／13 次去重 GPU 样本满足覆盖超过 100 像素且其中过半实际消费历史；整套场景分别有 30／29 次正常合成样本、29／28 次任意效果域消费。该检查使用隐藏隔离窗口；不能将此组合的通过挪用于其它后端或用户目视验收。
+
+在此之前的 `guardian-coherence-iris-vulkan-sorted-world.log` 双端均于图形初始化失败，尚未进入世界：`Iris.duringRenderSystemInit → Iris.setDebug(false) → IrisRenderSystem.<clinit> → SamplerLimits → glGetInteger` 在 Vulkan 下无当前 OpenGL context，JVM 原生终止。依赖字节码显示该 Iris 1.11.4 路径在关闭 debug 时仍读取 GL 设备。此日志不证明本模组的 Iris＋Vulkan 效果渲染通过，也不将初始化失败归为历史解析失败；需要能进入世界的 Iris 运行条件补齐该矩阵。本模组现有 Vulkan 分支仍在创建 `IrisApiAccess` 前返回原版环境，本次没有改写或伪造 Iris API。
+
+新增诊断后的 `mixed-motion-sodium-vulkan-gpu.log` 在双端 Sodium＋Vulkan 各通过 4345 个实际 Blaze3D 断言，并主动加载两种特殊粒子状态及守卫者模型以检查 mixin 应用。此前 `mixed-motion-vulkan-gpu.log` 因临时夹具无条件执行 Sodium 原生状态对照而未启用其运行时依赖，停在缺少 `RenderPassAccessor`，不能计作纯原版回归或生产渲染故障。
+
+`ITEM_PICKUP` 使用独立粒子身份覆盖其物品渲染状态的原实体身份，再复用现有烘焙物品捕获。`pickup-id-ordered-world.log` 双端原版 OpenGL／原顺序场景各获得 30 次有效的实际 RGBA32F 对象运动纹理读回，移动且置信度为正的像素累计分别为 9245／9876；实际帧中对应批次非零，整批构建及 CPU／GPU kernel 检查成功。该旧判据未扣除 jitter 差，只能证明非零原始运动与置信度，不能单独证明物体运动。夹具生成未加入世界的钻石拾取粒子，不存在其它可见实体运动。
+
+加强后的 `pickup-dejitter-fastpoll-vanilla-sorted-world.log` 已在双端原版 OpenGL 六目标路径通过：读回先扣除当前／前帧 jitter 差，再要求剩余运动非零且预期深度有效、置信度为正；两端各有 30 次有效样本，移动像素累计 7643／8304。实际匹配批次同时非零，整批 `BUILD SUCCESSFUL`。临时驱动以 20ms 轮询，保证持续生成仅三 tick 寿命的粒子；此前 `pickup-dejitter-vanilla-sorted-world.log` 因夹具引用不存在的旧物品字段编译失败，`pickup-dejitter-vanilla-sorted-fixed-fixture.log` 则因一秒轮询使粒子在下一次读回前死亡，双端零消费断言失败，均保留为失败证据。加强通过项不等于透明物品、完整后端矩阵或视觉验收。
+
+`pickup-transparent-vanilla-sorted-world.log` 已补双端原版 OpenGL 六目标的半透明拾取场景，使用实际蓝色染色玻璃物品：CPU 提交快照中实际出现 `ITEM_ENTITY` 域，按 GPU 遥测采样时间去重后，Fabric／NeoForge 分别有 9／22 次物品域非零历史消费，整体 `BUILD SUCCESSFUL`。该证据覆盖半透明特殊粒子的实际域接线与消费，不替代原绘制顺序路径、物品运动方向读回或透明交错对照。
+
+`render-clock-fastpoll5-vanilla-ordered-world.log` 已在双端原版 OpenGL 原绘制顺序路径通过实际渲染时钟检查：集成服务器设为 5 TPS、渲染上限 60 FPS，跟踪同一存活烟雾粒子 6 秒，逐次核对 key／token／epoch 不变且渲染帧递增。Fabric／NeoForge 分别捕获 292／284 个不同渲染帧，其中游戏 tick 未变而渲染快照更新 261／254 次，相邻渲染帧连续提交 228／209 次，检查后恢复 20 TPS，整体 `BUILD SUCCESSFUL`。初次 `render-clock-vanilla-ordered-world.log` 的 20ms 轮询仅采到 10／4 次相邻帧而未通过覆盖断言；复测仅提高临时驱动频率到 5ms，没有降低门槛。该检查不代表完整暂停／断帧／实例复用矩阵或 GPU 运动方向已经全部通过。
+
+`cloud-transitions-continuity-vanilla-ordered-world.log` 已在双端原版 OpenGL 原顺序路径通过云平移、FAST／FANCY／OFF 往返、距离缩小重建和资源重载，整体 `BUILD SUCCESSFUL in 3m 39s`。扣除 jitter 后，Fabric／NeoForge 分别有 75／72 个连续云面呈预期向左平移；FAST、FANCY 和重载后的云域各要求至少 3 个去重 GPU 历史消费样本。关闭云后云快照及历史释放，世界历史仍保持 16 帧。距离缩小后面数分别从 188／198 变为 40／16，重建前后仍连续存在的面分别保留 32／16 个身份；期间共有 6951／1904 次相邻成功渲染帧的共同云面身份核对。Fabric 另有 2 个先缺席再返回的云面，获得新身份符合仅保留上一成功帧的契约。
+
+较早的 `cloud-transitions-vanilla-ordered-world.log` 在 NeoForge 距离重建处失败：临时夹具错误地要求重建前后共有 key 全部保留 token，没有检查中间是否实际消失。修正后的夹具以 5ms 轮询提交快照，仅允许有实际缺席记录的云面更换 token；没有修改生产身份实现。上述通过项证明快照平移、连续身份、局部释放／重建与 GPU 历史消费，不等于逐像素验证每个云面的 GPU 运动方向，也不覆盖 Sodium 云重建。
+
+`performance-frame-matrix-vanilla-ordered.log` 完成双端原版 OpenGL 原顺序的 1080p／1440p／4K × 普通／密集烟雾／雨／雪各 12 个实际世界窗口，整体 `BUILD SUCCESSFUL in 12m 56s`。每窗口预热至少 5 秒、测量至少 20 秒，实际雨雪纹理均已核对，每个窗口至少取得 590 个连续渲染帧间隔。Fabric 自有附件／缓冲峰值为 635.9–1951.1 MiB，NeoForge 为 713.4–1931.9 MiB，4K 有部分区间走当前帧。该批次未持续刷新隔离实例的输入时钟，原版 AFK 限帧使多数窗口稳定在约 33.4 ms；这些帧时间不计作有效的无后台限制性能结论。后续检查又在复用的旧验证世界中发现未安排的文字和绳索实体，故上述内存数值也只能表示该混合负载的真实分配，不能当作普通／烟雾场景代表成本。后续夹具已增加输入时钟刷新、`throttleReason=NONE` 断言、独立验证世界、清理非玩家实体及拒绝非预期效果种类，仍需实际复测。
+
+`weather-roof-performance-unthrottled-vanilla-ordered.log` 双端均未进入性能窗口，止于天气列中心反投影断言。原因已从实际源码核对：`AntiAliasingController.worldProjection` 将实际 jitter 后的投影存入帧相机，成功解析后 `TaaMethod.previousCamera` 也保存该快照；临时夹具却在反投影前再次添加 jitter，造成约 0.02 格的列中心偏移。夹具已去掉重复 jitter，原有误差门槛保持 0.02；生产天气捕获和相机代码未改。此失败不计作屋顶或性能通过证据。
+
+修正后的 `weather-roof-clean-flat-small-vanilla-ordered.log` 已在双端原版 OpenGL 原顺序路径通过无屋顶→放置石屋顶→移除屋顶→镜头横移四格，整体 `BUILD SUCCESSFUL in 3m 34s`。每步均反投影核对天气列中心，屋顶范围内各有 63 个实际雨柱；有顶时提交底部不低于屋顶上表面，移除后恢复至地面。横移后两端各有 355 个共同世界列保留 token；全过程世界 epoch 不变、世界历史保持 16 帧，每步至少 3 个去重天气域 GPU 消费样本。此证据覆盖提交几何、列身份与天气域消费，不能代替屋顶逐像素遮挡、图案 GPU 方向或其它后端矩阵。该批附带 1080p 普通负载窗口已排除 AFK 限帧，但天气过渡在预热边界仍有残留；完整性能结论使用后续明确固定天气状态的新批次。
+
+`performance-clean-flat-v2-vanilla-ordered.log` 完成双端各 12 个修正后的实际世界窗口，整体 `BUILD SUCCESSFUL in 12m 3s`。日志确认使用 RTX 5070 Laptop GPU、NVIDIA 621.01、OpenGL，Gradle／游戏使用 JDK 25；运行时未启用 Sodium／Iris。独立平地世界固定在 `(0,-60,0)`，yaw=0、pitch=-10，渲染距离与云距离均为 4，FANCY 云、Halton／16、锐化 0、效果开启、预算 2048 MiB、VSync 关闭、帧率选项 260。普通烟雾每 250ms 生成 2 个营火粒子，密集烟雾每次 64 个；雨雪窗口核对实际天气纹理。每窗口预热至少 5 秒、采连续帧间隔至少 20 秒；所有窗口 `throttleReason=NONE`，没有非预期实体效果或历史槽预算拒绝。以下帧间隔来自无 CPU 插桩的隔离开发客户端，仍包含开发环境、GPU 遥测和验证驱动开销，不是发布环境 FPS 或 AA 增量成本。
+
+| 加载器 | 分辨率 | 场景 | 平均 ms | P95 ms | P99 ms | 自有附件／缓冲峰值 MiB | 当前帧区间最大数 |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Fabric | 1920×1080 | 普通烟雾 | 2.703 | 3.758 | 4.654 | 396.3 | 0 |
+| Fabric | 1920×1080 | 密集烟雾 | 5.505 | 7.270 | 9.031 | 429.1 | 0 |
+| Fabric | 1920×1080 | 雨 | 4.780 | 6.246 | 7.198 | 429.1 | 1 |
+| Fabric | 1920×1080 | 雪 | 4.430 | 5.666 | 6.632 | 508.2 | 0 |
+| Fabric | 2560×1440 | 普通烟雾 | 3.330 | 4.177 | 4.879 | 844.6 | 0 |
+| Fabric | 2560×1440 | 密集烟雾 | 7.247 | 9.123 | 10.555 | 751.5 | 0 |
+| Fabric | 2560×1440 | 雨 | 6.548 | 8.016 | 9.360 | 751.5 | 1 |
+| Fabric | 2560×1440 | 雪 | 6.006 | 7.039 | 8.368 | 892.1 | 0 |
+| Fabric | 3840×2160 | 普通烟雾 | 5.580 | 6.406 | 10.249 | 1899.2 | 0 |
+| Fabric | 3840×2160 | 密集烟雾 | 12.987 | 14.648 | 18.325 | 1622.7 | 0 |
+| Fabric | 3840×2160 | 雨 | 11.257 | 12.752 | 16.974 | 1622.7 | 1 |
+| Fabric | 3840×2160 | 雪 | 20.471 | 22.636 | 28.257 | 1939.2 | 0 |
+| NeoForge | 1920×1080 | 普通烟雾 | 3.003 | 4.163 | 5.057 | 396.3 | 0 |
+| NeoForge | 1920×1080 | 密集烟雾 | 7.372 | 10.039 | 12.525 | 438.8 | 0 |
+| NeoForge | 1920×1080 | 雨 | 5.501 | 7.067 | 8.382 | 438.8 | 1 |
+| NeoForge | 1920×1080 | 雪 | 4.942 | 6.418 | 7.562 | 517.9 | 0 |
+| NeoForge | 2560×1440 | 普通烟雾 | 3.574 | 4.595 | 5.248 | 703.9 | 0 |
+| NeoForge | 2560×1440 | 密集烟雾 | 9.136 | 12.062 | 13.827 | 739.9 | 0 |
+| NeoForge | 2560×1440 | 雨 | 8.361 | 10.062 | 12.094 | 739.9 | 1 |
+| NeoForge | 2560×1440 | 雪 | 7.544 | 9.039 | 10.939 | 880.6 | 0 |
+| NeoForge | 3840×2160 | 普通烟雾 | 5.687 | 6.514 | 7.593 | 1899.2 | 0 |
+| NeoForge | 3840×2160 | 密集烟雾 | 14.413 | 17.521 | 20.940 | 1634.3 | 0 |
+| NeoForge | 3840×2160 | 雨 | 12.929 | 14.616 | 19.459 | 1634.3 | 1 |
+| NeoForge | 3840×2160 | 雪 | 20.768 | 23.052 | 28.165 | 1950.7 | 0 |
+
+两端每窗口分别至少 977／964 个连续帧间隔。1080p 普通烟雾各有 10 次按 GPU 读回时间去重的粒子域历史消费，样本内消费像素累计 145471／174716；同时记录到冲突拒绝，不能将全域拒绝当作正常积累。1080p 密集烟雾也各有 10 次粒子域消费；此检查尚不替代两团受控反向运动烟雾的逐像素交叉对照。普通窗口的 GPU replay／motion／resolve／compose 均值分别为 Fabric `0.561／0.210／0.288／0.147 ms`、NeoForge `0.688／0.212／0.289／0.156 ms`。对应合成器 CPU submit 四项为 `0.123／0.180／0.114／0.992 ms` 和 `0.130／0.188／0.115／1.016 ms`；完整捕获／上传／冻结 CPU 成本使用另行插桩窗口，不用本组 submit 冒充。自有资源计数包含当时仍驻留的模组附件与缓冲，不能当作显卡总显存或纯历史纹理大小；当前帧区间计数也不等于预算拒绝。
+
+`performance-cpu-weather-pattern-vanilla-opengl.log` 补充双端原版 OpenGL 的 1080p 普通烟雾 CPU 插桩窗口，整体 `BUILD SUCCESSFUL in 2m 48s`。Fabric／NeoForge 各记录 20 秒、6961／6462 个连续帧间隔，均 `scopeErrors=0`、`throttleReason=NONE`，粒子域各有 10 次去重历史消费。捕获入口、上传、命令冻结的渲染线程独占累计耗时分别为 `383.747／6747.032／98.500 ms` 和 `451.585／6393.326／118.046 ms`，折算每帧约 `0.055／0.969／0.014 ms`、`0.070／0.989／0.018 ms`；本场景这三类工作线程计时均为零。插桩范围为效果捕获入口、`TemporalUploadArena.upload` 和原生命令冻结入口，委托原版顶点及原生回调暂停计费，再进入已插桩 AA 方法时恢复；结果包含插桩开销，也不代表所有外围 mixin／事件桥接的绝对总成本。无 CPU 插桩矩阵的总帧间隔仍以前一批为准。
+
+同一日志还在双端各通过 3919 个实际 Blaze3D 断言，其中新增雨／雪相位的 8 个 GPU 对照场景：用生产 `WeatherEffects` 生成连续相位、`EffectHistory` 生成对应、`EffectMotionPass` 实际绘制并读回 RGBA32F，核对雨纹跨模 32、雪纹跨 512 tick、多 tick 时间差时的水平／垂直运动方向、量值、前帧深度和内部可靠度；131072 tick 时间掩码断点要求 CPU 拒绝且 GPU 置信度非正。几何为受控四边形，采样纹理使用不透明夹具，不能代替真实雨雪 alpha／遮挡场景。临时通用夹具现仅在 Sodium 运行时存在时执行 Sodium 原生绘制状态对照；本次明确跳过该项，故断言总数不能与有 Sodium 时的 4372 个直接比较。
+
+`weather-pattern-sodium-vulkan-gpu.log` 已在双端 Sodium＋Vulkan 完成相同雨雪相位方向／量值／深度／断点拒绝检查，双端各通过 4456 个实际 Blaze3D 断言，整体 `BUILD SUCCESSFUL in 1m 44s`。该批包含有 Sodium 运行时的原生绘制状态对照，也复核已有 GPU 合成、历史预算及时间戳断言；不是另一轮实际世界天气生命周期或 Vulkan 性能矩阵。
+
+受控实际烟雾交叉新增三组双端证据：`particle-crossing-settled-vanilla-ordered-opengl.log`（原版 OpenGL 原顺序，整体 `BUILD SUCCESSFUL in 1m 36s`）、`particle-crossing-sodium-sorted-vulkan.log`（Sodium＋Vulkan 六目标，1m 35s）和 `particle-crossing-fixed-sprite-vanilla-sorted-opengl.log`（原版 OpenGL 六目标，1m 32s）。每组在独立世界中先检查两个等深度反向运动的真实营火烟雾粒子，再将其中一个放到较远深度交叉；另一个远离重叠区的烟雾作为可靠对照。固定 Halton／16、锐化 0、晴天、云关闭和默认历史预算。夹具控制模拟位置／尺寸／alpha，保留原版粒子实例、纹理、提取、捕获及生产合成器，不能当作未经控制的完整烟雾生命周期或整团密集烟雾场景。
+
+每个场景使用生产 `EffectHistoryTelemetry` 已完成且已提交的异步 RGBA8 读回，按提交帧号匹配成功提交的几何和 jitter；缺失对应帧的采样明确跳过，不用当前帧几何解释旧 GPU 结果。读取的拒绝像素必须有覆盖且消费／权重均为零，并位于两颗移动烟雾可能重叠的范围；独占区域的消费统计要求远离其它烟雾包围范围至少两个像素，不能把包围范围交集直接视为实际 alpha 重叠。上述每端每场景至少 3 个去重冲突样本、8 个有效像素样本、5 个可靠对照消费样本，两颗移动烟雾在分离区域均有非零消费。等深度场景证明运动和身份冲突拒绝；不同深度场景另外证明深度冲突拒绝。
+
+另对实际生产 `EffectMotionPass` 的 RGBA32F 运动和 RGBA8 身份附件作同步读回，按当前 token 与相邻成功提交快照核对运动量和前帧深度，容差分别为 `0.00003` UV 和 `0.00001` 深度；扣除相邻帧 jitter 后，两个烟雾的水平位移方向相反。每个粒子每场景至少 3 次读回各验证超过 10 个可靠像素，连续成功提交时身份保持稳定；场景结束仍要求世界历史为 16、AA ACTIVE、无合成失败或历史预算拒绝。此次没有为烟雾交叉修改生产实现。
+
+`particle-crossing-fixed-sprite-sodium-ordered-vulkan-sidebar.log` 补齐双端 Sodium＋Vulkan 原顺序，整体 `BUILD SUCCESSFUL in 1m 51s`。等深度场景 Fabric／NeoForge 分别有 13／14 个有效像素样本、各 3 个冲突样本，运动冲突拒绝像素累计 1349／1618，身份冲突拒绝 1847／2302；不同深度场景有 17／18 个有效样本，三种冲突拒绝分别均为 1315／1345。两个场景的独立对照分别在所有有效样本内消费历史，两颗移动烟雾的分离区域也均消费历史。连同前三批，已覆盖 Fabric／NeoForge × 原版 OpenGL／Sodium＋Vulkan × 原顺序／六目标的 16 个受控场景；没有声称覆盖另外的原版 Vulkan、Sodium OpenGL、Iris 或完整多粒子烟雾团。
+
+另以两团各四颗真实营火烟雾加一颗远离交叉区域的对照，完成相同四组合的 16 个多粒子团场景。每团为间隔 `0.32` 的 2×2 布局，粒子尺寸 `0.30`、alpha `0.6`，使用原版 `big_smoke_4`；两团中心按相反方向移动，先同处深度 3，再把第二团移到深度 5。控制的是模拟位置与外观，原版提取、实际纹理 alpha、生产 GPU 运动与历史解析保持原路径。沿用固定 Halton／16、锐化 0、默认预算与提交帧匹配规则，每场景至少持续 12 秒。
+
+四批严格版本均通过；下表的运动冲突像素仅计入同时落在两团可能覆盖范围的像素，且每场景至少有 3 个去重跨团运动冲突样本，避免只靠同团内身份重叠满足检查。数字按 Fabric／NeoForge 排列。
+
+| 日志（均位于 `%TEMP%/aamod-effects-check`） | 组合 | 等深度跨团运动拒绝 | 不同深度跨团运动拒绝 | 终态 |
+| --- | --- | --- | --- | --- |
+| `dense-crossing-cross-group-vanilla-ordered-opengl.log` | 原版 OpenGL 原顺序 | 1391／1560 | 1438／524 | `BUILD SUCCESSFUL in 1m 26s` |
+| `dense-crossing-cross-group-vanilla-sorted-opengl.log` | 原版 OpenGL 六目标 | 1508／1312 | 2457／2722 | `BUILD SUCCESSFUL in 1m 37s` |
+| `dense-crossing-cross-group-sodium-ordered-vulkan.log` | Sodium＋Vulkan 原顺序 | 3234／1388 | 2660／2736 | `BUILD SUCCESSFUL in 1m 43s` |
+| `dense-crossing-cross-group-sodium-sorted-vulkan.log` | Sodium＋Vulkan 六目标 | 2369／1321 | 2611／2735 | `BUILD SUCCESSFUL in 1m 39s` |
+
+每场景有 8–22 个有效 GPU 遥测样本，独立对照在全部有效样本均消费历史，两团在排除另一团和对照包围范围的区域也分别消费。拒绝像素要求覆盖有效、消费和权重为零；不同深度场景另外要求深度冲突拒绝。九颗粒子各至少 3 次实际 RGBA32F／身份附件读回，每次超过 10 个可靠像素，分别核对运动量和前帧深度；连续提交验证 token／世代稳定，扣 jitter 后团中心移动方向相反。结束时均要求 AA ACTIVE、世界历史 16、无合成失败或历史预算拒绝。最早 `dense-crossing-vanilla-ordered-opengl.log` 也通过基础团检查，但尚未加入跨团专门计数，不作为上述严格矩阵的一部分。该矩阵没有覆盖任意密度、未知粒子路径、原版 Vulkan、Sodium OpenGL 或 Iris；同域多运动重叠处仍按契约拒绝，不能宣称所有重叠表面都能精确积累。
+
+真实雨雪遮挡新增同帧 GPU 读回：临时 agent 仅在 `TemporalEffects.commit` 返回时回调，在清理前取得实际 `EffectDraw`、原版雨雪纹理和 UV；分别用清空深度及同帧干净不透明深度驱动独立 `EffectMotionPass`，将后一份参考的身份附件与生产身份逐像素比较。参考复用生产 shader，所以零差异本身只证明生产输入与参考相符；另用无障碍参考的真实纹理覆盖和深度，识别被石墙／屋顶遮住的像素，并要求这些位置的生产身份为零。开放区域仍有非零覆盖，天气域实际消费历史，世界历史保持 16，不能用全空或整域拒绝通过。
+
+每端分别运行雨＋石墙、雪＋石墙、雨＋屋顶、雪＋屋顶，固定 Halton／16、锐化 0、云关闭和默认预算；每场景稳定后至少观察 8 秒，有 8 个同帧像素样本和 8 个去重消费样本。原顺序另外要求被挡像素的真实原生贡献 alpha 为零，并在排除邻近可见天气贡献的内部区域检查 RGBA16F 已提交历史 alpha 为零。六目标保留原版独立天气目标中的墙后颜色／代表深度，并要求实际存在墙后天气颜色；在其它透明目标为空的前提下，遮挡内部区域最终合成 RGB 与稳定不透明背景相差不超过 1 LSB。不能要求六目标天气目标自身全零，否则会错误否定原版排序语义。
+
+| 日志（均位于 `%TEMP%/aamod-effects-check`） | 组合与结果 | 证据范围 |
+| --- | --- | --- |
+| `weather-occlusion-color-vanilla-ordered-opengl.log` | 双端原版 OpenGL 原顺序，`BUILD SUCCESSFUL in 1m 48s` | 每端四场景的身份／深度、原生贡献及历史 alpha；后续严格复查仍有未解释失败，不能单凭本批声明稳定通过 |
+| `weather-occlusion-native-alpha-details-vanilla-opengl.log` | 双端原版 OpenGL 原顺序，`BUILD SUCCESSFUL in 1m 45s` | 清理后的夹具、严格断言及失败详情；四场景均通过，不能解释前批偶发失败 |
+| `weather-occlusion-isolated-color-vanilla-sorted-opengl.log` | 双端原版 OpenGL 六目标，`BUILD SUCCESSFUL in 1m 50s` | 四场景，非天气目标为空；每场景累计 17425–64137 个内部颜色像素通过，身份零差异 |
+| `weather-occlusion-isolated-color-sodium-ordered-vulkan.log` | 双端 Sodium＋Vulkan 原顺序，`BUILD SUCCESSFUL in 1m 46s` | 四场景，每场景累计 17469–63686 个历史 alpha 像素通过，原生贡献 alpha 为零，身份零差异 |
+| `weather-occlusion-isolated-color-sodium-sorted-vulkan.log` | 双端 Sodium＋Vulkan 六目标，`BUILD SUCCESSFUL in 1m 48s` | 四场景，非天气目标为空；每场景累计 17343–63665 个内部颜色像素通过，身份零差异 |
+
+夹具失败记录保留：首批 `weather-occlusion-vanilla-ordered-opengl.log` 的 `fillbiome` 体积超过 32768 上限，未切到雪，整批不计通过；修正范围后通过 Brigadier 返回值检查实际修改。`weather-occlusion-biome-fixed-vanilla-ordered-opengl.log` 因临时夹具误用返回 void 的 API 而未编译，不是运行时问题。最初六目标颜色检查误要求独立天气目标 alpha 为零；后改为最终排序颜色。随后 `weather-occlusion-native-depth-debug-fabric-opengl.log` 读回证实目标中存在非天气 `item_entity` 贡献，不能直接把合成色与纯不透明背景相比；隔离夹具现直接 discard 非玩家实体、关闭方块选中叠层、使用最少粒子，并显式检查其它透明目标为空。上述改动均在 TEMP，没有为通过检查修改生产透明合成代码。
+
+`weather-occlusion-isolated-color-vanilla-ordered-opengl.log` 的双端雨＋石墙在部分像素出现实际原生贡献 alpha 非零、代理身份被挡的差异，整批失败。后续单端 `weather-occlusion-native-alpha-debug-fabric-opengl.log` 四场景通过（`BUILD SUCCESSFUL in 1m 49s`），以及双端 `weather-occlusion-native-alpha-details-vanilla-opengl.log` 四场景通过（1m 45s）；严格断言未放宽，增加的 alpha／深度／token 失败详情因该批未失败而没有捕获到反例。不能只凭复测通过抹掉原失败。
+
+随后 `weather-occlusion-geometry-classifier-vanilla-ordered-opengl.log` 增加第三份 GPU 参考：相同实际面片、相同深度和 rasterization，仅使用逐纹素读回确认 alpha 全为 255 的原版 missing 贴图，把纹理孔洞暂时填满以判断墙前是否还有任何天气几何。日志捕获到原生 alpha 为 58／80 的两种反例位置均有墙前几何 token，说明“最近的有色雨滴在墙后”不能推出“该像素所有雨面片都在墙后”；旧断言误把前后混合的纹理覆盖归为完整遮挡。该批没有足够完整遮挡内部颜色像素，按原门槛超时失败，不能算颜色验收通过。它解释了旧断言不足以证明穿墙，但没有证明所有混合纹理覆盖差异都已解决。
+
+最终夹具将相机设为 `(-0.25,-60,-0.2)`，墙为 `(0,-60,0)` 至 `(2,-54,0)`，屋顶为 `(0,-58,0)` 至 `(3,-58,5)`；分别保留被挡半屏和开放区。完整遮挡颜色检查只统计真实纹理参考在墙后、且全不透明几何参考在墙前没有任何面片的像素，内部颜色检查再要求邻近像素也没有墙前几何。真实纹理仍用于实际覆盖、身份和运动；不透明贴图仅用于独立几何分类，不替代生产纹理或取消原有误差门槛。完整矩阵如下，每端每批四个雨雪×墙／屋顶场景，共 32 个场景，均每场景 8 个同帧样本、8 个历史消费样本、身份零差异、世界历史 16、无预算拒绝或合成失败。
+
+| 日志（均位于 `%TEMP%/aamod-effects-check`） | 组合 | 每场景累计内部颜色像素范围 | 终态 |
+| --- | --- | --- | --- |
+| `weather-occlusion-full-geometry-near-vanilla-ordered-opengl.log` | 双端原版 OpenGL 原顺序 | 39968–131062 | `BUILD SUCCESSFUL in 1m 50s` |
+| `weather-occlusion-full-geometry-near-vanilla-sorted-opengl.log` | 双端原版 OpenGL 六目标 | 40197–131289 | `BUILD SUCCESSFUL in 1m 46s` |
+| `weather-occlusion-full-geometry-near-sodium-ordered-vulkan.log` | 双端 Sodium＋Vulkan 原顺序 | 39878–131361 | `BUILD SUCCESSFUL in 1m 48s` |
+| `weather-occlusion-full-geometry-near-sodium-sorted-vulkan.log` | 双端 Sodium＋Vulkan 六目标 | 40010–131961 | `BUILD SUCCESSFUL in 1m 49s` |
+
+原顺序在这些完整遮挡像素的原生贡献 alpha 和内部已提交历史 alpha 均为零；六目标在非天气目标为空、且确有被挡天气颜色时，内部最终 RGB 与稳定不透明画面相差不超过 1 LSB。完整遮挡场景已获得双端两后端／两路径证据；墙前后混合纹理面的原生／代理覆盖一致性及其它生命周期／后端组合仍需单独核对。所有新 agent、GPU 参考和世界夹具均留在 TEMP，本批没有修改生产天气实现。
+
+随后对远墙前后混合雨雪补充“缺失代理身份”的同帧颜色检查。沿用实际生产原生贡献、运动／身份／冲突附件及当前／前帧 jitter，另建独立历史池且每次清除其历史，产生零历史当前帧参考。仅对原生贡献 alpha 非零、生产身份 RGB 全零的像素，逐 RGBA 分量核对已提交 RGBA16F 解析结果与参考的 half-float bit 完全相同。检查在成功提交回调中执行，不能用不同帧的附件混比；每场景至少持续 12 秒、60 个同帧样本、3 个确有回退像素的样本、累计 10 个回退像素，以及 5 个去重天气历史消费样本。四批各包含双端雨／雪，共 16 个场景，全部通过；表中数字按 Fabric／NeoForge 排列。
+
+| 日志（均位于 `%TEMP%/aamod-effects-check`） | 组合 | 雨／雪累计回退像素 | 终态 |
+| --- | --- | --- | --- |
+| `weather-mixed-current-frame-vanilla-ordered-opengl.log` | 原版 OpenGL 原顺序 | 雨 162／160，雪 268／273 | `BUILD SUCCESSFUL in 1m 36s` |
+| `weather-mixed-current-frame-vanilla-sorted-opengl.log` | 原版 OpenGL 六目标 | 雨 966646／967706，雪 388003／386641 | `BUILD SUCCESSFUL in 1m 33s` |
+| `weather-mixed-current-frame-sodium-ordered-vulkan.log` | Sodium＋Vulkan 原顺序 | 雨 166／147，雪 289／285 | `BUILD SUCCESSFUL in 1m 35s` |
+| `weather-mixed-current-frame-sodium-sorted-vulkan.log` | Sodium＋Vulkan 六目标 | 雨 983636／974885，雪 388575／389055 | `BUILD SUCCESSFUL in 1m 34s` |
+
+各场景有 113–117 个同帧样本、12 个去重天气消费样本；AA ACTIVE、世界历史 16，未出现预算拒绝或合成失败。六目标独立天气目标保留墙后原生颜色，所以缺失代理身份的回退像素更多，不能把这些颜色当作穿墙。本批证明缺失可靠代理身份时保留当前帧，不证明所有有身份的混合纹理面均与原生覆盖准确对应，也不把同一像素跨采样重复计数解释成不同像素总面积。新增夹具只位于 TEMP，未修改生产天气代码。
+
+生命周期验证已从聚合资源计数扩展为保存切换前的实际对象。临时夹具仅从本模组拥有的合成器、干净世界快照、世界解析和物体运动渲染器出发，收集纹理、缓冲及 ring 的全部三槽缓冲；不沿借用的原生主目标／原生后处理链遍历。采集时要求对象存在且尚未关闭，透明算法往返、效果 OFF、AA OFF、resize 双向、资源重载、FAST 预设和退出世界后，分别要求旧对象 `isClosed()` 为真；重新分配的资源在下一次采集时仍需开放。效果 OFF 只核对效果自有对象，并要求第四阶段世界历史继续为 16。每个加载器有九个旧对象关闭检查点。
+
+OpenGL 查询池额外检查实际对象的 `closed` 状态；Vulkan 的公开接口没有关闭状态，因此 TEMP agent 在原生 `VulkanQueryPool.close` 和 `destroy` 成功返回处记录对象身份，要求同一旧查询池的两个事件均已发生。事件只观察执行，不主动销毁或代替原生延迟回收。各通过批次查询池没有未检查项。该证据覆盖检查点仍持有的自有纹理／缓冲／查询池，不等于连续追踪期间产生的每一个临时对象、所有 fence 或驱动内部显存。
+
+实际调用原版 `Options.applyGraphicsPreset`，确认 FAST→FXAA、FANCY→SMAA、FABULOUS→TAA，前两档需要实际渲染 ACTIVE，最后恢复六目标效果合成和世界历史 16。增加四档 SMAA 实际 GPU 执行后，发现原上游装饰性 ASCII 图案的行末反斜杠导致 Vulkan GLSL 330 报 `line continuation not supported`；已仅删除该注释图案，保留算法与许可声明，并在 `SMAA-SOURCES.md` 记录差异。双端构建 `smaa-vulkan-logo-fix-build.log` 为 `BUILD SUCCESSFUL in 26s`。失败批次 `lifecycle-owned-gpu-presets-sodium-ordered-vulkan.log` 保留，不计整项通过；修复后的原门槛未放宽。
+
+| 日志（均位于 `%TEMP%/aamod-effects-check`） | 组合 | 通过范围 | 终态 |
+| --- | --- | --- | --- |
+| `lifecycle-owned-gpu-presets-vanilla-ordered-opengl.log` | 双端原版 OpenGL，初始原顺序 | 透明算法往返、对象关闭、三预设，高档 SMAA | `BUILD SUCCESSFUL in 2m 36s` |
+| `lifecycle-owned-gpu-presets-vanilla-sorted-opengl.log` | 双端原版 OpenGL，初始六目标 | 同上，反向起始布局 | `BUILD SUCCESSFUL in 2m 32s` |
+| `lifecycle-owned-gpu-presets-query-events-sodium-ordered-vulkan.log` | 双端 Sodium＋Vulkan，初始原顺序 | 完整生命周期、查询池 close＋destroy、三预设和四档 SMAA | `BUILD SUCCESSFUL in 2m 49s` |
+| `lifecycle-owned-gpu-presets-query-events-sodium-sorted-vulkan.log` | 双端 Sodium＋Vulkan，初始六目标 | 同上，反向起始布局 | `BUILD SUCCESSFUL in 2m 47s` |
+| `lifecycle-owned-gpu-presets-query-events-vanilla-ordered-opengl.log` | 双端原版 OpenGL，初始原顺序 | 完整生命周期、OpenGL 查询池状态、三预设和四档 SMAA | `BUILD SUCCESSFUL in 2m 47s` |
+
+真实营火烟雾新增五类变换的双端 GPU 对照：平移、连续相机旋转下的 billboard、roll、尺寸变化，以及原版 `big_smoke_4`／`big_smoke_5` 纹理切帧。夹具只控制实际粒子实例的模拟位置、roll、尺寸、alpha 和 sprite；提取、原版 `QuadParticleRenderState.buildLayer`、生产运动及历史解析保留实际路径。成功提交回调中取本帧真实 `EffectDraw`，另外执行同一原生粒子 state 的 `buildLayer`，要求四角位置逐分量与捕获几何相差不超过 `0.000002`。前四场景另以原生边向量／边长／位置检查实际变换幅度大于 `0.02`，不能只靠 jitter 使“几何发生变化”的计数通过。
+
+对生产 RGBA32F 运动和 RGBA8 身份附件同步读回，按本帧三角形的屏幕重心坐标做透视校正，将前帧四角投影到相同表面位置，逐像素核对 UV 位移和前帧深度；容差分别为 `0.00003` 和 `0.00001`。每类变换每端至少持续六秒、三个原版四角样本和三个各超过 20 个可靠像素的 GPU 样本，前四类还要求连续帧 token／世代稳定且至少十帧实际变化。切帧时要求 `APPEARANCE` 拒绝、生产运动／身份置信为零，随后同 sprite 恢复可靠运动；本矩阵每端均捕获 11 次切帧拒绝和 21–22 个恢复样本。
+
+| 日志（均位于 `%TEMP%/aamod-effects-check`） | 组合 | 场景数 | 终态 |
+| --- | --- | --- | --- |
+| `particle-transform-native-excursion-vanilla-ordered-opengl.log` | 双端原版 OpenGL 原顺序 | 10 | `BUILD SUCCESSFUL in 1m 35s` |
+| `particle-transform-native-excursion-vanilla-sorted-opengl.log` | 双端原版 OpenGL 六目标 | 10 | `BUILD SUCCESSFUL in 1m 31s` |
+| `particle-transform-native-excursion-sodium-ordered-vulkan.log` | 双端 Sodium＋Vulkan 原顺序 | 10 | `BUILD SUCCESSFUL in 1m 38s` |
+| `particle-transform-native-excursion-sodium-sorted-vulkan.log` | 双端 Sodium＋Vulkan 六目标 | 10 | `BUILD SUCCESSFUL in 1m 32s` |
+
+40 个受控场景均保持 AA ACTIVE、世界历史 16、无预算拒绝或合成失败，每场景实际有 15–24 个原版四角和可靠 GPU 样本。较早 `particle-transform-native-corners-vanilla-ordered-opengl.log`（1m 33s）未加入原生变化幅度门槛，不替代本表严格版本。本批没有修改生产粒子实现；没有覆盖模型式特殊粒子、拾取粒子方向、全部粒子类型、其它兼容组合或用户长期画质观察。
+
+初批 `particle-crossing-vanilla-ordered-opengl.log` 在初始传送／投影过渡期间就要求连续身份，未完成有效检查；后续夹具先等待两秒，且原版六目标批次实际记录到初期 `projection_changed` 重置，稳定后再核对。较早 `particle-crossing-vanilla-sorted-opengl.log` 的 NeoForge 等深度场景只有 16 个运动冲突像素，未达预先要求的 20 个，故整批不计通过；Minecraft 的 12 个随机营火烟雾图案实际 alpha 覆盖从 4 到 107／256 纹素，随机稀疏形状会使每秒遥测漏掉重叠。修正夹具从真实工厂取得并固定原版 `big_smoke_4`，保持原有误差和通过门槛，不替换为不透明测试贴图。
+
+临时性能 agent 将 CPU 捕获、上传和冻结命令按嵌套独占时间分项，主渲染线程与工作线程分列；独立的无 CPU 插桩批次记录连续 `Minecraft.runTick` 间隔的均值／P95／P99。预检 `perf-cpu-bootstrap-fixed-both.log` 已在双端进入实际世界并成功结束，但观察点仍继承旧云场景，不能用来代表固定地面负载。agent 初次遇到 ASM 重复类和 Fabric 对计时类的加载隔离，现分别通过临时包名重定位和只含计时器的 bootstrap 辅助 jar 处理；所有 agent 与夹具仅用于临时隔离验证，不进入发布 jar。
+
+外围 CPU 计时已补实际 Mixin 桥接审计。临时 agent 在已变换的 Minecraft／Blaze3D 类中识别本模组的提取、原生命令捕获和场景边界方法，将干净快照／合成准备的剩余自身 CPU 记为独立 `bridge` 分项；嵌套调用按独占时间计费。原版 `Operation.call` 暂停计时，本模组 consumer 的贡献捕获 callback 保留计时，避免漏掉 lambda 内几何处理。每窗口记录实际调用的方法与次数，不能仅以“类已插桩”推断场景覆盖。最终版本标记为 `outer-mixin-bridges-owned-callbacks-v2`，下表为 1080p 普通／雨／雪各至少 20 秒窗口的渲染线程累计时间除以连续帧数，单位 ms／帧；这些数据包含插桩成本，不替代前述无 CPU 插桩帧时间矩阵。
+
+| 加载器／场景 | 帧数 | 捕获 | 上传 | 冻结 | 场景桥接 |
+| --- | --- | --- | --- | --- | --- |
+| Fabric 普通 | 4454 | 0.1415 | 1.4517 | 0.0668 | 0.1122 |
+| NeoForge 普通 | 4235 | 0.1506 | 1.4896 | 0.0686 | 0.1267 |
+| Fabric 雨 | 2402 | 1.6660 | 2.8674 | 0.0926 | 0.1761 |
+| NeoForge 雨 | 2171 | 1.7982 | 2.8628 | 0.0997 | 0.2140 |
+| Fabric 雪 | 2464 | 1.6844 | 2.5369 | 0.1036 | 0.1621 |
+| NeoForge 雪 | 2270 | 1.7641 | 2.4243 | 0.1096 | 0.1782 |
+
+日志 `%TEMP%/aamod-effects-check/performance-cpu-owned-callbacks-v2-vanilla-ordered-opengl.log` 为 `BUILD SUCCESSFUL in 2m 18s`；六窗口均 `scopeErrors=0`，实际执行粒子、天气、云、原生命令和场景桥接，主／工作线程分别记录。初次修正 callback 的临时 agent 因括号错误未编译，日志 `performance-cpu-owned-callbacks-vanilla-ordered-opengl.log` 保留，不计通过。
+
+额外混合场景要求实际执行绳索、字形、火焰、粒子、天气及命令桥接，六目标另要求执行 `prepareEffectsComposition`。给燃烧实体增加真实遮雨顶，保留视野中的雨与完整原检查；双端两路径四个 20 秒窗口各有 1158–1194 个连续帧、39–41 个实际执行的桥接方法、1159–1195 次火焰捕获，全部 `scopeErrors=0`。日志 `performance-cpu-feature-bridges-v2-weather-roof-vanilla-ordered-opengl.log` 与 `performance-cpu-feature-bridges-v2-weather-roof-vanilla-sorted-opengl.log` 分别为 `BUILD SUCCESSFUL in 1m 58s` 和 `1m 53s`。早期无遮雨顶的六目标批因真实雨水熄灭火焰未满足覆盖而失败，不能当作通过；原顺序早期成功批没有火焰回调门槛，也不替代最终版本。该审计只证明列明路径在这些实际场景中被计时，不证明全部特殊粒子、其它后端和未知模组桥接都执行过。
+
+性能检查还发现正常的历史槽预算拒绝只增加 `currentOnly`，没有在诊断中列出受限域。`EffectLayerHistoryPool` 现按当前帧记录实际分配拒绝的域，并通过合成器暴露给 F3 的 `history_budget` 字段；下一帧、历史重置或资源关闭清除旧标记。预算分配、域优先级和当前帧绘制策略未改变。`history-budget-diagnostics-gpu-submitted-fixture.log` 已通过双端构建，双端 Sodium＋OpenGL 各有 4372 个实际 Blaze3D 断言，包括新增拒绝域、逐帧清理、增大实际预算后的历史恢复与关闭实物释放。首批因临时天气夹具的 Java import 冲突未进入 GPU；次批因在一次原生 submit 内模拟超过三个逻辑帧，触发上传 ring 对当前 submit fence 的等待保护；最终夹具在复用前三槽前实际提交并等待读回，没有改变生产缓冲同步代码。
+
+整域捕获拒绝现实际参与历史解析；晚于域解析才发生的预算／来源失效中止整帧事务，下一帧对受影响域使用完整原生贡献，其余域仍保留独立历史。原因区分 `CAPTURE_BUDGET` 和 `UNRELIABLE_SOURCE`，完整测量恢复后才重新使用历史。历史池按照稳定域优先级、同域驻留优先和确定区间键预留资源，包含尚未分配成功的需求；预算收缩按同一优先级回收，不按原绘制插入顺序争抢。
+
+### 2026-11-13 收尾核对
+
+本轮只针对具体修复补充证据，没有运行新的参数或兼容组合矩阵，也没有操作用户的观察客户端。
+
+- 临时 `%TEMP%/aamod-stage5-review/WeatherPhaseCheck.java` 通过独立 `common:stageFiveWeatherCheck` 任务调用原版实际雪柱生成器和生产 `WeatherEffects`，覆盖同 tick 插值、512 tick 回绕、多个周期及 131072 tick 原生掩码断点。U／V 图案位移误差小于 `4e-7`，预设容差 `1e-5`，`BUILD SUCCESSFUL in 16s`。任务由 TEMP 中的 init script 注册，未写入项目构建脚本。
+- 包含雪纹对应、文字捕获、失败帧不提交历史、后置准备捕获隔离、世界后置 pass 未抖动投影、下述 GLSL 标识符、持续降级、效果预算独立计费／局部降级、历史槽提前准入、逐 sprite 动画版本及上传页扩容修复的最新代码，使用进程内 JDK 25 执行 `./gradlew.bat :fabric:build :neoforge:build --offline --no-daemon`，最终重建 `BUILD SUCCESSFUL in 26s`。系统默认 JDK 27 未改动。
+- 两端 `0.8.2-beta` jar 均包含全部 58 个声明的 client mixin 类，包括新增的后置提交标记、gizmo 准备捕获隔离及 sprite 动画状态绑定 mixin；此前已直接读取包内效果 shader 确认使用修复后的 `sharedMotion`，最新两包未发现打包的 Sodium／Iris 实现或 TEMP 验证类。发布 jar 位于各加载器 `build/libs/aamod-<loader>-0.8.2-beta.jar`，需要替换同版本的旧构建。这些包是当前实现构建，不表示第五阶段全部门槛通过。
+- 随后的 Fabric 隔离客户端在 Intel OpenGL 驱动上发现 `taa_effect_motion.fsh` 使用 GLSL 保留字 `coherent`，导致实际效果管线编译失败并退回当前帧。已将该局部变量改为 `sharedMotion`；该修复只改变标识符。
+- 修复后的针对性场景保持 Halton＋16、锐化 0、效果开启和原版六目标透明不变，验证工具只存在于 `%TEMP%/aamod-stage5-review/runtime` 的 Java agent、反射夹具和 init script 中。`fabric-rollback.log` 及 `fabric.result` 记录了 124 个有独立效果解析的帧，正式 GPU 遥测出现透明域和云域的非零历史权重；第 165 帧由独立工具注入一次合成失败，世界历史归零、相机连续性失效、原有 6 个物体历史清空且效果身份提交帧不前移，随后世界历史恢复至 16，合成失败状态清除。目标检查输出 `passed=true`。
+- 这次场景没有真正的 `alwaysOnTop` 提交；旧临时检查将透视文字当作后置绘制，因而其零次后置调用及超时结果不能用作投影修复证据。已移除该场景不适用的检查目标；后续真正后置场景的证据见下文。
+- 隔离客户端在目标检查通过、主动停止并保存世界后仍触发原版 `Client shutdown from post-main watchdog`，进程退出码为 `-8`，所以 `runClient` 任务整体失败，不能记为启动任务通过。未因此更改生产代码或全局验证标志。固定设置长期观察尚待用户进行；旧 TEMP 日志中的历史记录未在本轮重新复核。
+- 后续源码核对发现，原顺序路径的不支持混合／目标等失败仅保留一帧，下帧仍捕获并重建资源；即便此前已经锁定异常，干净世界解析和效果捕获也仍在启动。现统一保持非暂时性失败，后续帧停止效果捕获、快照与效果资源初始化；预算和暂时缺失输入仍可重新评估。原顺序 scratch 和管线数量上限的异常原因同步为 `history_budget`／`capture_budget`，以免把预算条件误判为能力缺失。
+- `fabric-failure-policy.log` 与 `fabric-failure-policy.result` 对此修复作一次独立检查，参数和场景保持不变：第 158 帧注入 `capture_budget`，确认中止且恢复；第 175 帧注入 `composition_blend_unsupported`，随后连续 3 帧失败原因保留、世界历史为零、效果捕获关闭，干净快照及效果合成器的自有 GPU 分配均为零。通过现有 `PIPELINE_CHANGED` 失效入口重置后，实际效果解析及 16 帧世界历史恢复。目标结果 `passed=true`；退出仍触发前述 watchdog，`runClient` 整体失败。所有检查代码位于 TEMP，不加入业务路径；此证据不覆盖其它兼容组合或全部异常来源。
+- 真正的后置场景改用原版 F3 的 `VISUALIZE_CHUNKS_ON_SERVER = ALWAYS_ON`：`ChunkDebugRenderer` 实际调用 `setAlwaysOnTop`，无需伪造提交。初次场景发现后置文字在准备时被当作世界几何捕获，约 18 万顶点和 8192 个拒绝批次耗尽物体预算，世界历史持续停在 1 帧；这促成了上述按 Submit 阶段排除的修复。旧 `before-capture-fix`／`readiness-unverified` 日志中的投影检查未通过，不计为投影证据；临时 agent 的变换与首帧同步问题仅在 TEMP 工具中修正。
+- 最新 `fabric-native-late.log`／`fabric-native-late.result` 保持 Halton＋16、锐化 0 与六目标透明不变，在 Fabric 原版 OpenGL 下通过：19 次实际世界后置 pass、19 次原生绘制及 19 次投影上传覆盖全部 16 个采样位置。上传矩阵直接与同帧注入 jitter **之前**的实际输入投影比较，逐分量容差 `1e-6`；原生绘制绑定所核对的投影缓冲，结束恢复先前缓冲与投影类型。世界历史达到 16 帧、物体预算未溢出，普通世界文字仍被捕获。投影限制到世界 pass 后，作用域次数由通用分发器版本的每帧 3 次降为每帧 1 次。目标检查 `passed=true`，退出仍触发既有 watchdog，`runClient` 整体失败；该检查不代替用户长期观察或其它后端的画质验收。
+- 效果预算核对发现配置与实现口径不符：原回调把世界 TAA 与物体运动资源也扣进了额外效果预算。修正后，独立的 Fabric 原版 OpenGL 低预算场景又实际暴露云运动上传空间不足时抛出 `history_budget`、反复让整帧回退的问题，证据在 `%TEMP%/aamod-stage5-budget/fabric-before-domain-budget-fix.log` 与同名 `.result`；该次 `passed=false`，不计通过。
+- 修复后复用同一场景：1600×900、Halton＋16、锐化 0、原绘制顺序、效果预算 128 MiB，保留原版云和营火烟雾。`fabric-budget.log`／`fabric-budget.result` 记录 16 个满足条件的帧，世界历史保持 16，实际世界资源 `69120336` 字节、效果资源 `92987392` 字节、总计 `162107728` 字节；总计虽超过效果预算，效果自身仍低于 `134217728` 字节，合成器无失败。粒子与云因预算仅使用当前帧贡献，不能把此场景算作这两域的历史消费证据。检查 `passed=true`；正常保存退出后仍有既有 watchdog，`runClient` 整体失败。随后仅收紧了“工作区自身超预算时不回收其它域历史”的预检查，最终源码双端构建通过；未为该分支增加新的运行矩阵。工具全部位于上述 TEMP 目录，该证据不覆盖所有域优先级排列或其它兼容组合。
+- 后续预算准入核对发现，帧初为已经驻留的运动附件再次预留 `36` 字节／像素，会提前回收本可保留的历史；而原流程在无法取得历史槽时仍先分配运动工作区。现仅计算缺少的附件，并把同时容纳历史槽与工作区的准入放在运动生成之前，沿用同一稳定优先级；准入失败不先释放其它域，不回收当帧待提交历史。
+- 针对此改动仅运行一次独立竞争场景，日志和结果位于同一 TEMP 目录的 `fabric-priority.log`／`fabric-priority.result`：Fabric 原版 OpenGL、1600×900、Halton＋16、锐化 0、原绘制顺序、160 MiB 效果预算，保持原版云与营火烟雾。16 个满足条件的连续检查帧内，同一份粒子历史保持 16 帧、世界历史保持 16，只有云按预算使用当前帧贡献，合成器无失败。实际效果资源 `162119680` 字节，小于预算 `167772160`；世界资源 `69120336`，总计 `231240016`。正式 GPU 遥测同时记录粒子消费 `12642/19414` 个覆盖像素、平均权重 `0.582`，不是仅以 CPU 匹配或提交计数判断历史生效。目标 `passed=true`；退出仍有既有 watchdog，`runClient` 整体失败。该场景不覆盖任意域排列或其它后端，未修改用户客户端，工具不进入源码集或发布包。
+- 逐 sprite 版本修复的独立工具位于 `%TEMP%/aamod-stage5-sprites`。初批 `fabric-plain-glass-unverified.log`／`.result` 没有取得透明玻璃模型样本，随后实际触发 `Temporal upload budget exhausted`，从而暴露上传池不断保留不足页的问题。改用染色玻璃并修复上传池后的 `fabric-exact-glass-unverified.log`／`.result` 仍没有该模型的精确对应样本，整场景超时；不能将它当作静态模型验收，也不能只凭该现象认定是 Indigo 的原因。
+- 最新 `fabric-sprites.log`／`fabric-sprites.result` 保持 Fabric 原版 OpenGL、960×540、Halton＋16、锐化 0、六目标透明、2048 MiB 预算。实际水纹图案状态发生 536 次变化时，捕获的水面外观版本均相应变化；另有 536 次火焰动画改变而水纹不变，水面版本保持不变。检查用原版动画状态的实际图像索引／插值相位作对照，没有读取生产版本表来重复同一逻辑。独立创建的生产 `TemporalUploadArena` 在 600 个渲染帧中执行从 1024 字节逐帧增加到 1623 字节的真实 GPU 上传，实际三槽分配峰值 `6144` 字节，关闭后计数归零；世界历史达到 16。该次仍因模型样本缺失超时，最终 `passed=false`，只记录以上两个已实际完成的子检查，不能称整场景通过。没有修改用户客户端或切换其设置。
+- NeoForge 的相同临时场景完成模组加载和图集创建，新动画 mixin 未报错，但停在 Kotlin for Forge 的加载警告页，未进入世界；随后结果文件记录超时失败，没有模型样本。只读识别该 TEMP 进程后已向其窗口发送正常关闭消息；主线程结束后仍有开发 JVM 未退出，`ServerWatchdog` 在已关闭的 Minecraft module 中加载失败。此处不强制终止 Java，也不把正在收尾的 `runClient` 当作已通过或已终止；双端发布构建成功与本次运行检查分别记录。
+
+### 2026-11-13 未归属透明模型覆盖修复
+
+只读解析上述 Fabric 保存世界的实体 NBT，确认 `minecraft:white_stained_glass` 展示实体存在且 block state 正确。随后独立 agent 记录到实际执行 `ExtendedBlockModelFeatureRenderer.buildGroup`，因此该场景走 Indigo 扩展模型，而非原版 `BlockModelFeatureRenderer` 的逐烘焙面对应入口。缺失样本促成了上述不可靠覆盖接入；没有据此扩大 FRAPI 精确顶点历史的支持声明。
+
+验证仅使用 `%TEMP%/aamod-stage5-sprites` 中的 `CoverageAgent.java`、`Probe.java` 和 `coverage.init.gradle`，不新增项目任务、源码集或发布验证类。保持 Fabric 原版 OpenGL、960×540、Halton＋16、锐化 0、六目标透明和 2048 MiB 预算。首轮临时检查把材质字符串中 `textures` 误认成文字管线，`fabric-coverage-fixture-error.result` 因此失败；修正夹具只检查管线部分后，重跑同一场景，未改生产逻辑或扩大组合。
+
+`fabric-coverage.log`／`fabric-coverage.result` 记录 `passed=true`：16 个模型检查帧中玻璃外观版本保持 0，置信度为 0且关联原生绘制；实际 GPU 附件读回有 5234 个玻璃 token 像素，其身份 alpha 为 0、运动有效性非正。另记录 144 个正常字形有效对应，没有重复的不可靠字形批次，世界历史为 16；水纹变化 8 次且外观版本相应变化，另有 7 次无关火焰更新不影响水纹版本。此证据覆盖扩展模型当前帧拒绝，不代表该模型消费了历史，也不补齐原版静态模型精确对应或完整透明交错的验收。退出仍触发既有 watchdog，`runClient` 整体失败。
+
+新代码通过两端独立发布构建，`BUILD SUCCESSFUL in 12s`。此前常规构建在 common 开发 jar 的 manifest 更新处因旧 NeoForge 临时 JVM 占用而失败；仅由 TEMP init script 改用另一中间开发 jar 名称绕过，未修改项目构建脚本、系统 JDK 或终止 Java。最初将构建与客户端一起请求时，`runClient` 失败早于 Fabric `shadowJar` 执行，因此另行完成两端 build 后才更新发布包；不将旧 Fabric 包记为已包含修复。
+
+### 2026-11-13 云、拴绳与火焰 GPU 对应
+
+独立工具位于 `%TEMP%/aamod-stage5-review/native-effects`，复用 TEMP agent 观察实际 `EffectMotionPass` 输出，没有增加生产探针或测试任务。固定 Fabric 原版 OpenGL、960×540、Halton＋16、锐化 0、六目标透明和 2048 MiB 预算，在高处石台场景保留原版云、移动的拴绳牛及着火牛。相邻成功渲染帧的四角数据通过屏幕重心坐标和透视插值计算预期前帧 UV／深度，与实际 RGBA32F 运动附件比较；云另按实际 RGBA8 token 选像素，拴绳和火焰先匹配原生世界深度，以排除被遮挡的代理面。物理位移扣除同帧实际 jitter 差值。
+
+首次运行的临时夹具仍使用旧名 `Entity.getTags`，在场景建立时失败，已按实际 26.2 的 `entityTags` 修正；`fabric-native-effects-fixture-api.result` 不计为运行证据。随后合并场景的 `fabric-cloud-leash-partial.log`／`.result` 中，云和拴绳各有 3 个 GPU 样本、各 96 个匹配像素，最大 UV 误差 `3.390e-6`、前帧深度误差 `2.554e-8`，均低于预设的 `3e-5`／`1e-5` 容差。扣除 jitter 后分别出现约 `0.0977`／`1.5275` 像素位移，世界历史为 16。火焰未取得可靠样本，最终因其检查超时而 `passed=false`；这里只记录已经完成的云／拴绳子检查，不将整场景记为通过。
+
+将临时夹具的反射访问移出逐像素循环后，仅对尚缺证据的火焰另作检查，关闭该隔离实例的云以减少无关负载，TAA 设置保持不变；没有改动用户的观察实例。`fabric-flame.log`／`fabric-flame.result` 记录 `passed=true`：实际火焰 3 个 GPU 样本、96 个匹配像素，最大 UV 误差 `2.735e-6`、深度误差 `4.730e-9`；扣除 jitter 后有约 `0.3851` 像素位移，世界历史为 16。原版火焰资源未启用帧插值，未替换动画或图案；可靠样本来自其外观未变的相邻渲染帧。两次运行退出均触发既有 watchdog，`runClient` 任务整体失败。
+
+此处补齐 Fabric 原版 OpenGL 下捕获几何至 GPU 运动输出的方向／量值／深度证据，不替代其它后端、全部云面原生覆盖、火焰切帧拒绝、完整透明交错或用户长期观察的验收。另核对原版云顶点 shader 的六面表、内侧面反序及高位 cell 编码与当前捕获重建一致。最终合成仍仅在 `TaaResolve.present` 执行一次后锐化；中英文配置提示已移除“所有半透明均拒绝历史、粒子只使用旧拒绝路径”的过时描述，说明效果处理由独立开关及预算决定。
+
+### 2026-11-13 冲突历史有效性修复
+
+源码核对发现，效果解析虽然拒绝当前帧的同域冲突，但历史身份附件原先直接复制代表表面的 token／置信度，未保存冲突结果，历史重建也未读取前帧信任度。这样在遮挡或烟团交叉结束后，仍可能重新消费上一帧已经混合了不同运动的颜色。现复用既有 RGBA8 历史身份附件保存冲突后的信任度，逐 tap 检查前帧 alpha；当前拒绝、历史有效性写入与 GPU 遥测共用同一份冲突阈值。没有新增附件、配置或测试入口，效果解析计时包含新增的有效性写入 pass。
+
+独立 `%TEMP%/aamod-stage5-history-trust/HistoryTrustCheck.java` 直接编译当前效果解析、权重和有效性 shader，在隐藏 OpenGL 场景读回输出。`gpu.log` 记录 `HISTORY_TRUST_CHECK_PASSED`：可靠历史实际改变颜色；忽略前帧信任度的对照能复现混入；运动／身份／深度三类冲突分别保存零信任度且逐字节保留 token；下一干净帧拒绝旧混合颜色，提交干净历史后恢复消费。该检查覆盖实际 shader 和 RGBA8 身份／RGBA32F 颜色夹具，不代替 Blaze3D 调度、Vulkan 或用户画质验收。工具及日志仅位于 TEMP，不进入项目源码集或发布包。
+
+使用进程内 JDK 25 完成两端离线发布构建，`build.log` 记录 `BUILD SUCCESSFUL in 24s`。TEMP init script 只更换 common 开发中间 jar 名称以避开既存客户端占用；项目构建脚本与系统默认 JDK 27 未改动。两端 `0.8.2-beta` 发布包已重建，需要替换此前同版本包；本次没有启动或操作用户客户端。
+
+### 2026-11-13 原顺序区间连续性修复
+
+原顺序合成已使用稳定 `ContributionIntervalKey` 管理独立历史，但另有列表位置比较：只要前面插入或删除了无关区间，就会清空当前位置不同的其它区间。现移除该位置比较及冗余布局缓存，保留原有按键查找、连续成功帧、逐像素 token／深度／信任度验证。合成继续按当帧实际调用顺序执行；没有把前帧层序用于当前绘制。
+
+独立 `%TEMP%/aamod-stage5-interval-continuity` 工具在 Fabric 原版 OpenGL 原绘制顺序路径运行，保持 960×540、Halton＋16、锐化 0 与 2048 MiB 效果预算。待真实云区间累积后，在原版 main 目标上交替执行与跳过一个 alpha 为零的独立原生透明 pass；该 pass 经实际命令捕获、冻结重放和区间合成处理。`fabric.result` 记录 `passed=true`：连续 32 帧中各有 16 次插入和不插入，原有云区间历史持续至 16 帧；正式 GPU 遥测有 `8879/23111` 个覆盖像素消费历史，平均权重 `0.360`。这证明无关区间插入不再破坏已有历史，并实际执行了当前历史有效性管线；不代表全部透明交错或其它环境已通过。最初的 `fabric-fixture-identifier` 记录因 TEMP 工具误用 Builder 的默认命名空间字符串重载而失败，未执行插入，不计通过。
+
+场景检查通过后，正常停止该隔离客户端仍触发退出 watchdog，故 `runClient` 任务整体失败。此次进一步核对了实际线程转储及开发运行依赖：渲染主线程和服务器线程已经结束，留下两组各 24 个非 daemon 空闲线程；Architectury Transformer Runtime 5.2.92 的实际 `ReadClasspathProviderImpl.class` 字节码在创建固定线程池并完成任务后，仅调用 `awaitTermination(0, SECONDS)`，没有调用 `shutdown`。字节码证据保存在同目录 `architectury-pool-bytecode.txt`，与同版本 sources jar 一致。这解释了开发运行的退出滞留，不能将 `runClient` 写成成功；没有为此修改 AA 关闭逻辑、全局验证标志或依赖代码。
+
+当前实现已通过 JDK 25 两端离线发布构建，`build.log` 记录 `BUILD SUCCESSFUL in 25s`。测试 agent、场景、资源名及结果文件均只存在于 TEMP；两端发布构建与上述客户端任务结果分别记录。
+
+| 门槛 | 当前证据 | 仍需补齐 |
+| --- | --- | --- |
+| E01 | CPU：弱引用身份、重排、出生死亡、失败帧、断帧、域变更与 token 世代；双端 Sodium＋Vulkan 实际暂停恢复；双端原版 OpenGL 原顺序同粒子 5 TPS／60 FPS 的稳定身份和连续渲染帧快照 | 其它后端的完整时钟／实例复用与断帧场景 |
+| E02 | CPU：随机四元数／尺寸／投影；GPU：实际四边形方向、深度、身份与孔洞；两端实际烟雾与模型式粒子可靠区消费；双端原版 OpenGL／Sodium＋Vulkan 两路径真实烟雾平移、billboard 相机旋转、roll、缩放、切帧的原版四角与 GPU 透视对应／深度、变化幅度、身份及切帧拒绝恢复；双端原版 OpenGL 六目标拾取粒子扣除 jitter 后有效 GPU 运动及半透明拾取实际物品域消费；双端 Sodium＋Vulkan 六目标模型式粒子过半覆盖消费 | 特殊粒子的完整后端／变换场景、半透明拾取原顺序及方向验证 |
+| E03 | CPU：实际雨雪相位、32／512 回绕、131072 掩码断点与前帧几何反解；双端原版 OpenGL 与 Sodium＋Vulkan 受控图案 GPU 方向／量值／深度／断点拒绝；原顺序雨域和六目标雪域消费；双端原版 OpenGL 原顺序晴雨雪往返、启停、屋顶几何和跨列身份；双端原版 OpenGL 与 Sodium＋Vulkan 各两路径的真实雨雪×墙／屋顶完整几何遮挡分类、逐像素身份、遮挡颜色及持续历史消费；相同四组合的前后混合雨雪在缺失代理身份时，已提交颜色与零历史参考逐分量 bit 一致 | 有身份混合纹理面的原生／代理覆盖准确性；其它后端／路径生命周期 |
+| E04 | 两端云／拴绳／火焰／字形实际捕获；云、普通及偏移文字、普通文字背景区间 GPU 消费；双端原版原顺序云平移、模式／距离／资源重建及连续身份；绳索实际形变、火焰动画版本、文字替换与 SEE_THROUGH 往返且世界历史不重置；Fabric 原版 OpenGL 真正 alwaysOnTop 的准备隔离、完整采样周期未抖动投影、原生绑定与状态恢复；逐 sprite 版本修复后 Fabric 实际水纹更新、无关火焰版本隔离及 Indigo 静态玻璃的零版本／不可靠 GPU 覆盖，字形有效对应保留；Fabric 原版 OpenGL 六目标场景的云／绳索／火焰各 3 个实际 GPU 运动方向、量值及前帧深度样本 | 全部云面原生覆盖、原版静态透明模型精确对应的动画隔离运行证据、透视文字当前帧贡献的完整像素对照、其它后端组合 |
+| E05 | GPU：独立颜色／alpha 历史权重受控读回；两后端双端实际世界非零消费 | 每个域正常负载下的独立证据与相反背景运动 |
+| E06 | GPU：孔洞、消失、预乘颜色／alpha 同权重；双端实际天气关闭后快照和域历史清空、世界继续积累 | 原生颜色格式、加色、完整场景合成 |
+| E07 | GPU：相反运动／身份冲突拒绝；两后端双端模型一致运动／形变分歧／不同拥有者及不可靠表面对照；双端原版 OpenGL 和 Sodium＋Vulkan 各两透明路径的双粒子及两团各四颗实际烟雾，等深度／不同深度反向交叉逐像素拒绝、跨团运动冲突、分离区域和独立粒子消费、实际 GPU 方向／深度及稳定身份 | 其它兼容组合；受控九粒子团场景不代表任意密度或未知粒子路径 |
+| E08 | 双端隔离场景：30 组原生 RGBA8 两遍后处理、等深度与零 alpha；两端实际世界六目标桥接运行 | 算法切换及完整透明交错对照 |
+| E09 | 当前深度对齐 GPU 对照；实际 framegraph 读依赖；双端原版和 Sodium 的确定性水／玻璃原顺序及六目标路径实际捕获与非零消费 | 透明实体交错及背景独立性的完整像素对照 |
+| E10 | 双端隔离场景：冻结命令、真实入口深度、深度写入／阻挡和加色，RGB 与原生相差不超过 1 LSB；Fabric 原版 OpenGL 固定场景中交替插入实际无颜色贡献区间，云历史连续 32 帧且有 GPU 消费 | 完整世界的非零贡献交错对照及资源边界 |
+| E11 | 双端原版 OpenGL／Sodium＋Vulkan、分别从原顺序／六目标开始的透明算法往返、画质预设 FAST→FXAA／FANCY→SMAA／FABULOUS→TAA、重载及目标释放／重建，检查 epoch、旧布局和旧对象关闭；Vulkan 两路径和原版 OpenGL 原顺序额外实际执行四档 SMAA | 其它兼容组合与完整透明交错 |
+| E12 | CPU 与双端 GPU：整域预算拒绝／恢复、晚到失败原子中止、真实资源优先级与缩容、预乘当前帧降级；双端实际天气域按需释放；双端 Sodium＋OpenGL 实际历史槽拒绝域、逐帧清理、增大预算恢复和关闭释放；双端原版 OpenGL／Sodium＋Vulkan 两路径九个生命周期检查点旧纹理／三槽缓冲关闭、OpenGL 查询池状态及 Vulkan 查询池实际 close＋destroy；Fabric 原版 OpenGL 的 128 MiB 效果独立计费及局部降级、160 MiB 竞争场景中云降级且同一粒子历史与世界历史保持 16，粒子有真实 GPU 消费；600 帧持续增长 GPU 上传保持单页容量档位且关闭后计数归零的子检查 | 全部失败点、其它域优先级排列、连续实物账本（含 fence）与去 jitter 恢复 |
+| E13 | CPU：设置合法／缺失／非法值；双端默认构建和 GPU 启动；Sodium 云两路径、粒子／地形原顺序实际消费；双端 Sodium＋Vulkan 六目标模型式粒子消费 | 完整 Sodium／Iris／Vulkan 与设置生命周期矩阵；Iris＋Vulkan 本轮止于依赖 GL 初始化 |
+| E14 | 双端原版 OpenGL 的 1080p／1440p／4K × 普通／密集烟雾／雨／雪连续帧均值／P95／P99、实际资源峰值与预算；1080p 普通／雨／雪 CPU 捕获／上传／冻结／场景桥接独占分项、实际调用清单和 GPU 四分项；双端两透明路径混合场景的绳索／文字／火焰等桥接实际计时且 scopeErrors=0；双端 OpenGL／Vulkan 时间戳检查 | 全部特殊路径及其它后端的计时覆盖；以上数值仅限明确记录的场景与开发环境，插桩数据不作为无插桩帧时间 |
+| E15 | 已重新生成含 GLSL 保留字、冲突历史有效性及原顺序区间连续性修复的两端构建；旧构建需替换，尚未收到当前构建的固定设置长期观察结果 | 用户画质确认；当前构建的观察反馈不替代尚缺的工程证据 |
+
+已生成两端当前实现 jar，但尚不能声明“第五阶段完成”；已有第四阶段用户验收不得挪用于本阶段。用户运行中的观察客户端保持由用户控制，必要的工程验证继续使用隔离进程。

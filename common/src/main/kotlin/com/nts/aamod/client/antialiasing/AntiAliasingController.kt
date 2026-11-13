@@ -10,12 +10,15 @@ import com.nts.aamod.client.antialiasing.ssaa.SsaaMethod
 import com.nts.aamod.client.antialiasing.smaa.SmaaMethod
 import com.nts.aamod.client.antialiasing.taa.TaaMethod
 import com.nts.aamod.client.antialiasing.taa.motion.MotionCapture
+import com.nts.aamod.client.antialiasing.taa.effects.TemporalEffects
 import com.nts.aamod.client.option.VideoAntiAliasingSettings
 import com.nts.aamod.client.compat.iris.IrisCompatibility
 import net.minecraft.client.Minecraft
 import net.minecraft.client.CameraType
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.client.renderer.LevelTargetBundle
+import net.minecraft.client.renderer.PostChain
+import com.mojang.blaze3d.resource.GraphicsResourceAllocator
 import net.minecraft.client.renderer.state.level.CameraRenderState
 import net.minecraft.world.entity.Entity
 import org.joml.Matrix4f
@@ -39,6 +42,7 @@ object AntiAliasingController {
     private var previousCamera: Entity? = null
     private var previousCameraType = CameraType.FIRST_PERSON
     private var previousMode = VideoAntiAliasingSettings.OFF
+    private var previousTransparency: Boolean? = null
     private var previousWidth = 0
     private var previousHeight = 0
     private val previousTargets = mutableMapOf<RenderStage, TargetState>()
@@ -64,7 +68,20 @@ object AntiAliasingController {
                 " | sharpen=${String.format(Locale.ROOT, "%.2f", method.sharpening)}",
             "TAA last reset: ${jitter.resetReason}" + (state.reason?.let { " | status reason: $it" } ?: ""),
             "TAA objects: vertices=${MotionCapture.vertices} | matchedBatches=${MotionCapture.validBatches}" +
-                " | rejectBatches=${MotionCapture.rejectedBatches} | budget=${if (MotionCapture.overflow) "EXCEEDED" else "OK"}"
+                " | rejectBatches=${MotionCapture.rejectedBatches} | budget=${if (MotionCapture.overflow) "EXCEEDED" else "OK"}",
+            "TAA effects: composition=${method.composition.backend} | particleCpuMatches=${TemporalEffects.correspondingParticles}/${TemporalEffects.capturedParticles}" +
+                " | preparedLayers=${method.composition.preparedLayers} | currentOnly=${method.composition.currentOnlyLayers}" +
+                " | capture=${method.composition.captureRejections.ifEmpty { "OK" }}" +
+                " | history_budget=${method.composition.historyBudgetDomains.ifEmpty { "OK" }}" +
+                " | reason=${TemporalEffects.failure ?: method.scene.failure ?: method.composition.failure ?: "OK"}",
+            "TAA effects GPU sample: ${method.composition.historyTelemetry}",
+            "TAA effects timings: ${method.composition.timings.diagnostic}",
+            "TAA effect surfaces: ${TemporalEffects.capturedKinds}",
+            "TAA owned GPU attachments/buffers: " + String.format(Locale.ROOT, "%.2f MiB",
+                method.allocatedBytes / 1048576.0),
+            "TAA world GPU attachments/buffers: " + String.format(Locale.ROOT, "%.2f MiB",
+                method.worldAllocatedBytes / 1048576.0) + " | effects: " + String.format(Locale.ROOT, "%.2f MiB",
+                method.effectAllocatedBytes / 1048576.0)
         )
     }
 
@@ -93,15 +110,18 @@ object AntiAliasingController {
         val minecraft = Minecraft.getInstance()
         val mode = VideoAntiAliasingSettings.getCurrentAAMode()
         val cameraType = minecraft.options.cameraType
+        val transparency = minecraft.options.improvedTransparency().get()
         if (minecraft.level !== previousLevel) invalidate(InvalidationReason.WORLD_CHANGED)
         if (minecraft.cameraEntity !== previousCamera || cameraType != previousCameraType) {
             invalidate(InvalidationReason.CAMERA_CHANGED)
         }
         if (mode != previousMode) invalidate(InvalidationReason.MODE_CHANGED)
+        if (previousTransparency != null && transparency != previousTransparency) invalidate(InvalidationReason.PIPELINE_CHANGED)
         previousLevel = minecraft.level
         previousCamera = minecraft.cameraEntity
         previousCameraType = cameraType
         previousMode = mode
+        previousTransparency = transparency
         val compatibleProvider = IrisCompatibility.beginFrame()
         val nextProvider = provider ?: compatibleProvider
         val identity = nextProvider.identity
@@ -195,6 +215,33 @@ object AntiAliasingController {
     }
 
     @JvmStatic
+    fun opaqueWorldDrawn(target: RenderTarget) {
+        val context = frame ?: return
+        val method = currentMethod() as? TaaMethod ?: return
+        if (framePrepared) guarded(method) { method.captureOpaque(context, target) }
+    }
+
+    @JvmStatic
+    fun renderAlwaysOnTop(draw: () -> Unit) {
+        val context = frame
+        val method = currentMethod() as? TaaMethod
+        if (context == null || method == null || !framePrepared) draw()
+        else method.renderAlwaysOnTop(context, draw)
+    }
+
+    @JvmStatic
+    fun addEffectsComposition(frameGraph: FrameGraphBuilder, targets: LevelTargetBundle, chain: PostChain) {
+        val method = currentMethod() as? TaaMethod ?: return
+        if (!framePrepared || !com.nts.aamod.client.option.TemporalSettings.effects.get()) return
+        method.composition.configureSorted(chain)
+        val pass = frameGraph.addPass("aamod_effects_composition")
+        val inputs = LevelTargetBundle.SORTING_TARGETS.associateWith { id -> checkNotNull(targets.get(id)) }
+        inputs.values.forEach { pass.reads(it) }
+        pass.disableCulling()
+        pass.executes { method.composition.prepareSorted(inputs.mapValues { it.value.get() }, GraphicsResourceAllocator.UNPOOLED) }
+    }
+
+    @JvmStatic
     fun addWorldResolve(frameGraph: FrameGraphBuilder, targets: LevelTargetBundle) {
         val method = currentMethod() ?: return
         if (RenderStage.WORLD_RESOLVE !in method.requirements) return
@@ -222,6 +269,9 @@ object AntiAliasingController {
     fun invalidate(reason: InvalidationReason) {
         RenderSystem.assertOnRenderThread()
         methods.values.forEach { it.invalidate(reason) }
+        if (reason == InvalidationReason.RESOURCES_RELOADED) {
+            com.nts.aamod.client.antialiasing.taa.composition.NativeTransparencyContract.clear()
+        }
         previousTargets.clear()
         if (reason == InvalidationReason.RESOURCES_RELOADED || reason == InvalidationReason.MODE_CHANGED || reason == InvalidationReason.PIPELINE_CHANGED) {
             failedMode = null

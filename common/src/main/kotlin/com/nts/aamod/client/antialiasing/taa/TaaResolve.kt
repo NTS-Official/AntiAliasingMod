@@ -21,12 +21,16 @@ import kotlin.math.min
 
 class TaaResolve : AutoCloseable {
     private val history = mutableListOf<RenderTarget>()
-    private var previousColor: RenderTarget? = null
+    private val rawColors = mutableListOf<RenderTarget>()
     private var uniforms: MappableRingBuffer? = null
     private var writeIndex = 0
     private var timestamps: GpuQueryPool? = null
     private val pendingQueries = BooleanArray(4)
     private var nextQuery = 0
+    private var pending = false
+    private var pendingSamples = 0
+    private var pendingQuery = -1
+    private var started = 0L
     var historyFrames = 0
         private set
     var resolveCpuNanos = 0L
@@ -35,17 +39,32 @@ class TaaResolve : AutoCloseable {
         private set
     val allocatedBytes: Long
         get() = history.sumOf { it.width.toLong() * it.height * 12 } +
-            (previousColor?.let { it.width.toLong() * it.height * 4 } ?: 0L)
+            rawColors.sumOf { it.width.toLong() * it.height * 4 } + (uniforms?.size()?.toLong() ?: 0L) * 3
 
-    fun resetHistory() { historyFrames = 0 }
+    fun resetHistory() {
+        abort()
+        historyFrames = 0
+    }
 
     fun render(target: RenderTarget, reproject: Matrix4f, current: JitterPoint, previous: JitterPoint, samples: Int, sharpness: Float, motion: RenderTarget) {
-        val started = System.nanoTime()
+        try {
+            val output = prepare(target, reproject, current, previous, samples, sharpness, motion)
+            present(target, output)
+            commit()
+        } catch (exception: Exception) {
+            abort()
+            throw exception
+        }
+    }
+
+    fun prepare(target: RenderTarget, reproject: Matrix4f, current: JitterPoint, previous: JitterPoint, samples: Int, sharpness: Float, motion: RenderTarget): RenderTarget {
+        check(!pending) { "TAA history transaction is already pending" }
+        started = System.nanoTime()
         check(target.colorTexture?.format == GpuFormat.RGBA8_UNORM) { "Unsupported TAA world color format" }
         allocate(target.width, target.height)
         val output = history[writeIndex]
         val prior = history[1 - writeIndex]
-        val raw = checkNotNull(previousColor)
+        val raw = rawColors[1 - writeIndex]
         val ring = checkNotNull(uniforms)
         val encoder = RenderSystem.getDevice().createCommandEncoder()
         val queries = timestamps
@@ -60,6 +79,9 @@ class TaaResolve : AutoCloseable {
         }
         val measure = queries != null && !pendingQueries[queryIndex]
         if (measure) encoder.writeTimestamp(queries, queryIndex * 2)
+        pending = true
+        pendingSamples = samples
+        pendingQuery = if (measure) queryIndex else -1
         MemoryStack.stackPush().use { stack ->
             val data = stack.malloc(112)
             reproject.get(0, data)
@@ -87,22 +109,42 @@ class TaaResolve : AutoCloseable {
             pass.draw(3, 1, 0, 0)
         }
         output.copyDepthFrom(target)
-        encoder.copyTextureToTexture(checkNotNull(target.colorTexture), checkNotNull(raw.colorTexture), 0, 0, 0, 0, 0, target.width, target.height)
+        encoder.copyTextureToTexture(checkNotNull(target.colorTexture), checkNotNull(rawColors[writeIndex].colorTexture), 0, 0, 0, 0, 0, target.width, target.height)
+        return output
+    }
+
+    fun present(target: RenderTarget, source: RenderTarget) {
+        check(pending) { "TAA output requires a prepared transaction" }
+        val encoder = RenderSystem.getDevice().createCommandEncoder()
+        val ring = checkNotNull(uniforms)
+        val nearest = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST)
         encoder.createRenderPass({ "aamod TAA output" }, checkNotNull(target.colorTextureView), Optional.empty()).use { pass ->
             pass.setPipeline(OUTPUT)
             pass.setUniform("TemporalConfig", ring.currentBuffer())
-            pass.bindTexture("InSampler", checkNotNull(output.colorTextureView), nearest)
+            pass.bindTexture("InSampler", checkNotNull(source.colorTextureView), nearest)
             pass.draw(3, 1, 0, 0)
         }
-        if (measure) {
-            encoder.writeTimestamp(queries, queryIndex * 2 + 1)
-            pendingQueries[queryIndex] = true
-            nextQuery = (queryIndex + 1) % pendingQueries.size
+    }
+
+    fun commit() {
+        check(pending) { "No TAA history transaction to commit" }
+        if (pendingQuery >= 0) {
+            RenderSystem.getDevice().createCommandEncoder().writeTimestamp(checkNotNull(timestamps), pendingQuery * 2 + 1)
+            pendingQueries[pendingQuery] = true
+            nextQuery = (pendingQuery + 1) % pendingQueries.size
         }
-        ring.rotate()
+        checkNotNull(uniforms).rotate()
         writeIndex = 1 - writeIndex
-        historyFrames = min(historyFrames + 1, samples)
+        historyFrames = min(historyFrames + 1, pendingSamples)
         resolveCpuNanos = System.nanoTime() - started
+        pending = false
+        pendingQuery = -1
+    }
+
+    fun abort() {
+        if (pending) uniforms?.rotate()
+        pending = false
+        pendingQuery = -1
     }
 
     private fun allocate(width: Int, height: Int) {
@@ -118,10 +160,11 @@ class TaaResolve : AutoCloseable {
                 target.createBuffers(width, height)
                 device.createCommandEncoder().clearColorAndDepthTextures(checkNotNull(target.colorTexture), Vector4f(), checkNotNull(target.depthTexture), 0.0)
             }
-            previousColor = object : RenderTarget("aamod TAA previous color", false, GpuFormat.RGBA8_UNORM) {}
-            checkNotNull(previousColor).also {
-                it.createBuffers(width, height)
-                device.createCommandEncoder().clearColorTexture(checkNotNull(it.colorTexture), Vector4f())
+            repeat(2) { index ->
+                val raw = object : RenderTarget("aamod TAA raw color $index", false, GpuFormat.RGBA8_UNORM) {}
+                rawColors.add(raw)
+                raw.createBuffers(width, height)
+                device.createCommandEncoder().clearColorTexture(checkNotNull(raw.colorTexture), Vector4f())
             }
             uniforms = MappableRingBuffer({ "aamod TAA uniforms" }, GpuBuffer.USAGE_UNIFORM or GpuBuffer.USAGE_COPY_DST or GpuBuffer.USAGE_MAP_WRITE, 112)
             if (device.deviceInfo.timestampPeriod() > 0f) {
@@ -134,10 +177,11 @@ class TaaResolve : AutoCloseable {
     }
 
     override fun close() {
+        abort()
         history.forEach { it.destroyBuffers() }
         history.clear()
-        previousColor?.destroyBuffers()
-        previousColor = null
+        rawColors.forEach { it.destroyBuffers() }
+        rawColors.clear()
         uniforms?.close()
         uniforms = null
         timestamps?.close()

@@ -4,7 +4,7 @@ The SMAA implementation uses the official `iryoku/smaa` source and lookup tables
 
 - Repository: https://github.com/iryoku/smaa
 - Revision: `71c806a838bdd7d517df19192a20f0c61b3ca29d`
-- Shader: `SMAA.hlsl`, imported as `shaders/include/smaa.glsl` with upstream notices retained. Text encoding and line endings are normalized for Minecraft resources.
+- Shader: `SMAA.hlsl`, imported as `shaders/include/smaa.glsl` with upstream notices retained. Text encoding and line endings are normalized for Minecraft resources. The decorative ASCII logo is omitted because its trailing backslashes trigger unsupported line continuation errors in the Vulkan GLSL 330 parser; shader code and license notices are unchanged.
 - Lookup inputs: `Textures/AreaTexDX9.dds` and `Textures/SearchTex.dds` from the same revision.
 - License: `SMAA-LICENSE.txt` in this directory and the notice in the imported shader.
 

@@ -6,6 +6,7 @@ import com.llamalad7.mixinextras.sugar.Local
 import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.blaze3d.vertex.VertexConsumer
 import com.nts.aamod.client.antialiasing.taa.motion.MotionCapture
+import com.nts.aamod.client.antialiasing.taa.motion.StableCustomGeometry
 import net.minecraft.client.renderer.SubmitNodeCollector
 import net.minecraft.client.renderer.feature.CustomFeatureRenderer
 import org.spongepowered.asm.mixin.Mixin
@@ -19,7 +20,9 @@ abstract class CustomMotionMixin {
         original: Operation<Void>, @Local submit: CustomFeatureRenderer.Submit
     ) {
         MotionCapture.withSubmission(submit) {
-            MotionCapture.withGeometry(renderer.javaClass, pose.pose(), false) { original.call(renderer, pose, consumer) }
+            MotionCapture.withGeometry(renderer.javaClass, pose.pose(), renderer is StableCustomGeometry) {
+                original.call(renderer, pose, consumer)
+            }
         }
     }
 }

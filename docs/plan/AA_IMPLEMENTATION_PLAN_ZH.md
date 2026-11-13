@@ -632,7 +632,9 @@ Fabric 固定机位每档记录 240 帧：OFF 平均 8.643 ms；SSAA 1.5× / 2×
 
 「选项 → 视频设置 → Anti Aliasing Mod → 抗锯齿」→ 现有 `AntiAliasingConfigScreen(parent)`。
 
-本模组侧栏分组通过公开 `ModOptionsBuilder.setNonTintedIcon` 注册 `aamod:icon.png`，直接复用 `assets/aamod/icon.png`，保留图标原色；由 Sodium 负责布局和缩放，两端使用相同注册入口。
+本模组侧栏分组通过公开 `ModOptionsBuilder.setName` 设置名称，并用 `setNonTintedIcon` 注册 `aamod:textures/gui/config-icon.png`。该 64×64 专用贴图沿用模组图标外观，放在 Sodium 使用的 Minecraft 纹理加载路径下；配套 `.mcmeta` 开启平滑过滤与边缘钳制，保留图标原色，由 Sodium 负责布局和缩放，两端使用相同注册入口。
+
+2026-11-10 已完成 Fabric／NeoForge 双端构建，并核对两份 `0.8.2-beta` 发布 jar 均包含专用图标、纹理元数据及 `SodiumConfigEntryPoint`。随后在双端 Sodium 0.9.2＋Vulkan 的隐藏隔离客户端中实际打开视频设置，确认侧栏出现原色模组图标、名称和版本；实际加载的 GPU 纹理为 64×64，配置页打开及关闭返回 Sodium 的往返检查均通过。日志为 `%TEMP%/aamod-effects-check/particle-crossing-fixed-sprite-sodium-ordered-vulkan-sidebar.log` 的双端 `AAMOD_SODIUM_SIDEBAR_CHECK_PASSED`；显示图为同目录 `sodium-sidebar-fabric-upright.png` 和 `sodium-sidebar-neoforge-upright.png`，仅对原始 GPU 读回作垂直翻转以便查看。此处图片只证明设置界面图标显示，不作 TAA 时域视效验收。
 
 共享页面继续提供模式、FXAA 四项参数、SSAA 倍率和 SMAA 质量；关闭时保存原版选项并返回传入的 Sodium 视频设置页面。不复制参数状态，不注入 Sodium 内部 GUI，不修改 Iris 的光影入口。未安装 Sodium 时保留原版 `qualityOptions` 中的抗锯齿选项；Fabric Mod Menu 与 NeoForge 内置配置入口继续可用，Sodium 入口本身无需 Mod Menu。
 

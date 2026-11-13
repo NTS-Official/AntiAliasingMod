@@ -50,6 +50,8 @@ class AntiAliasingConfigScreen(parent: Screen) : OptionsSubScreen(
             optionList.addOption(TemporalSettings.sequence, TemporalSettings.DEFAULT_SEQUENCE)
             optionList.addOption(TemporalSettings.samples, TemporalSettings.DEFAULT_SAMPLES)
             optionList.addOption(TemporalSettings.sharpness, TemporalSettings.DEFAULT_SHARPNESS)
+            optionList.addOption(TemporalSettings.effects, TemporalSettings.DEFAULT_EFFECTS)
+            optionList.addOption(TemporalSettings.effectBudget, TemporalSettings.DEFAULT_EFFECT_BUDGET_MIB)
         }
     }
 

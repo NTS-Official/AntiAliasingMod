@@ -9,5 +9,6 @@ dependencies {
     implementation "dev.architectury:architectury:${rootProject.architectury_api_version}"
     compileOnly "dev.architectury:architectury-injectables:${rootProject.architectury_injectables_version}"
     compileOnly("net.caffeinemc:sodium-fabric-api:${rootProject.sodium_version}+mc${rootProject.minecraft_version}") { transitive false }
+    compileOnly("net.caffeinemc:sodium-fabric:${rootProject.sodium_version}+mc${rootProject.minecraft_version}") { transitive false }
     compileOnly("maven.modrinth:iris:${rootProject.iris_version}+${rootProject.minecraft_version}-fabric") { transitive false }
 }

@@ -65,10 +65,10 @@ class VertexHistory(val frame: Long, val epoch: Long, val clip: FloatArray, val 
 
 internal class MotionSection(val geometry: Any, pose: Matrix4f?, val reliable: Boolean) {
     val inversePose = pose?.let { if (it.isFinite && abs(it.determinant()) > 1e-12f) Matrix4f(it).invert() else null }
-    val batches = linkedMapOf<MotionMaterial, MotionBatch>()
+    val batches = linkedMapOf<Pair<MotionMaterial, Any?>, MotionBatch>()
 }
 
-internal class MotionBatch(val material: MotionMaterial) {
+internal class MotionBatch(val material: MotionMaterial, val source: Any?) {
     private var vertices = FloatArray(9 * 64)
     private val localPosition = Vector3f()
     var count = 0

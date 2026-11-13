@@ -10,7 +10,8 @@ import net.minecraft.network.chat.Component
 class SodiumConfigEntryPoint : ConfigEntryPoint {
     override fun registerConfigLate(builder: ConfigBuilder) {
         builder.registerOwnModOptions()
-            .setNonTintedIcon(AAMod.id("icon.png"))
+            .setName(AAMod.MOD_NAME)
+            .setNonTintedIcon(AAMod.id("textures/gui/config-icon.png"))
             .addPage(
                 builder.createExternalPage()
                     .setName(Component.translatable("options.antialiasing"))

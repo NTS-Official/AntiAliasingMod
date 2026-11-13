@@ -1,14 +1,16 @@
 package com.nts.aamod.client.antialiasing.taa.motion
 
 import com.mojang.blaze3d.vertex.VertexConsumer
+import com.nts.aamod.client.antialiasing.taa.composition.NativeEffectDraws
 import net.minecraft.client.renderer.rendertype.RenderType
 
 internal class MotionVertexConsumer(private val delegate: VertexConsumer, private val type: RenderType) : VertexConsumer {
     private val vertex = FloatArray(6)
     private var section: MotionSection? = null
+    var effectsCaptured = false
 
     fun flush() {
-        section?.let { MotionCapture.vertex(it, type, vertex) }
+        section?.let { MotionCapture.vertex(it, type, vertex, NativeEffectDraws.source(this)) }
         section = null
     }
 

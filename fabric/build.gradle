@@ -35,6 +35,7 @@ dependencies {
     api "dev.architectury:architectury-fabric:${rootProject.architectury_api_version}"
 
     compileOnly "com.terraformersmc:modmenu:${rootProject.modmenu_version}"
+    compileOnly("net.caffeinemc:sodium-fabric:${rootProject.sodium_version}+mc${rootProject.minecraft_version}") { transitive false }
     localRuntime "com.terraformersmc:modmenu:${rootProject.modmenu_version}"
 
     irisRuntime("net.caffeinemc:sodium-fabric:${rootProject.sodium_version}+mc${rootProject.minecraft_version}") { transitive false }

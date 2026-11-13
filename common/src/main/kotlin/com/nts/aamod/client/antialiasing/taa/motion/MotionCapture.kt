@@ -4,16 +4,22 @@ import com.mojang.blaze3d.PrimitiveTopology
 import com.mojang.blaze3d.pipeline.RenderTarget
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.blaze3d.vertex.VertexConsumer
+import com.nts.aamod.client.antialiasing.taa.effects.ModelEffects
+import com.nts.aamod.client.antialiasing.taa.effects.TemporalEffects
+import com.nts.aamod.client.antialiasing.taa.composition.NativeEffectDraws
 import com.nts.aamod.client.mixin.render.motion.RenderSetupAccess
 import com.nts.aamod.client.mixin.render.motion.RenderTypeAccess
 import net.minecraft.client.renderer.feature.BlockModelFeatureRenderer
 import net.minecraft.client.renderer.feature.CustomFeatureRenderer
+import net.minecraft.client.renderer.feature.GizmoFeatureRenderer
 import net.minecraft.client.renderer.feature.ItemFeatureRenderer
 import net.minecraft.client.renderer.feature.ModelFeatureRenderer
 import net.minecraft.client.renderer.rendertype.OutputTarget
 import net.minecraft.client.renderer.rendertype.PreparedRenderType
 import net.minecraft.client.renderer.rendertype.RenderType
 import org.joml.Matrix4f
+import java.util.Collections
+import java.util.IdentityHashMap
 import java.util.WeakHashMap
 
 internal class MotionMaterial(val type: RenderType, val prepared: PreparedRenderType, val matrix: Matrix4f) {
@@ -34,6 +40,7 @@ object MotionCapture {
     private val draws = mutableListOf<MotionDraw>()
     private val rejectedSections = linkedMapOf<MotionVertexConsumer, MotionSection>()
     private val pending = mutableListOf<Triple<MotionOwner, GeometryKey, VertexHistory>>()
+    private val lateSubmits = Collections.newSetFromMap(IdentityHashMap<GizmoFeatureRenderer.Submit, Boolean>())
     private val renderer = MotionVectorRenderer()
     private var frame = -1L
     private var epoch = 0L
@@ -54,15 +61,13 @@ object MotionCapture {
         private set
     val allocatedBytes: Long
         get() = renderer.allocatedBytes
+    val currentOwner: MotionOwner? get() = if (active) owner else null
 
     fun beginFrame(frameId: Long) {
         endFrame()
         active = true
         frame = frameId
-        owners.entries.removeIf { entry ->
-            entry.value.history.entries.removeIf { it.value.frame != frameId - 1 }
-            entry.value.history.isEmpty()
-        }
+        owners.values.forEach { owner -> owner.history.entries.removeIf { it.value.frame != frameId - 1 } }
         projection = null
         vertices = 0
         validBatches = 0
@@ -71,6 +76,17 @@ object MotionCapture {
     }
 
     fun setProjection(matrix: Matrix4f) { projection = Matrix4f(matrix) }
+
+    fun excludeFromWorldHistory(submit: GizmoFeatureRenderer.Submit) {
+        if (active) lateSubmits.add(submit)
+    }
+
+    fun <Result> prepareGizmos(submits: List<GizmoFeatureRenderer.Submit>, action: () -> Result): Result {
+        if (!active || submits.none { it in lateSubmits }) return action()
+        flush()
+        active = false
+        try { return TemporalEffects.withoutCapture(action) } finally { active = true }
+    }
 
     fun owner(instance: Any): MotionOwner? = if (active) owners.getOrPut(instance) { MotionOwner() } else null
 
@@ -120,7 +136,11 @@ object MotionCapture {
             if (submission != null) overflow = true
             return consumer
         }
-        return MotionVertexConsumer(consumer, type)
+        return MotionVertexConsumer(consumer, type).also { NativeEffectDraws.alias(consumer, it) }
+    }
+
+    fun markEffectsCaptured(consumer: VertexConsumer) {
+        (consumer as? MotionVertexConsumer)?.effectsCaptured = true
     }
 
     internal fun section(consumer: MotionVertexConsumer, type: RenderType): MotionSection? {
@@ -130,7 +150,7 @@ object MotionCapture {
 
     internal fun touch(consumer: MotionVertexConsumer) { consumers.add(consumer) }
 
-    internal fun vertex(section: MotionSection, type: RenderType, values: FloatArray) {
+    internal fun vertex(section: MotionSection, type: RenderType, values: FloatArray, source: Any?) {
         if (vertices >= MAX_VERTICES || values.any { !it.isFinite() } ||
             type.primitiveTopology() != PrimitiveTopology.QUADS && type.primitiveTopology() != PrimitiveTopology.TRIANGLES
         ) {
@@ -143,7 +163,7 @@ object MotionCapture {
             state.`aamod$getLayeringTransform`().modifier?.accept(modelView)
             MotionMaterial(type, type.prepare(), Matrix4f(checkNotNull(projection)).mul(modelView))
         }
-        section.batches.getOrPut(material) { MotionBatch(material) }.append(values, section.inversePose)
+        section.batches.getOrPut(material to source) { MotionBatch(material, source) }.append(values, section.inversePose)
         vertices++
     }
 
@@ -154,7 +174,8 @@ object MotionCapture {
     }
 
     private fun finish(submission: MotionSubmission, section: MotionSection) {
-        for ((material, batch) in section.batches) {
+        for (batch in section.batches.values) {
+            val material = batch.material
             if (draws.size >= 8192) { overflow = true; return }
             val key = submission.key(section.geometry, material.type)
             val geometry = batch.geometry()
@@ -165,6 +186,7 @@ object MotionCapture {
             if (!wellFormed) { overflow = true; continue }
             val valid = section.reliable && section.inversePose != null && !material.conservative &&
                 prior?.corresponds(frame, epoch, geometry) == true
+            ModelEffects.capture(submission.owner, key, batch, clips, section.reliable && section.inversePose != null)
             draws.add(MotionDraw(batch, clips, prior?.clip, valid))
             if (valid) validBatches++ else rejectedBatches++
             pending.add(Triple(submission.owner, key, VertexHistory(frame, epoch, clips, geometry)))
@@ -173,12 +195,13 @@ object MotionCapture {
 
     fun render(target: RenderTarget): RenderTarget {
         flush()
-        for (section in rejectedSections.values) {
+        for ((consumer, section) in rejectedSections) {
             for (batch in section.batches.values) {
                 if (draws.size >= 8192) { overflow = true; break }
                 val clips = batch.clips(batch.material.matrix)
                 val primitive = if (batch.material.type.primitiveTopology() == PrimitiveTopology.QUADS) 4 else 3
                 if (batch.count % primitive != 0 || clips.any { !it.isFinite() }) { overflow = true; continue }
+                if (!consumer.effectsCaptured) ModelEffects.captureUnreliable(batch, clips)
                 draws.add(MotionDraw(batch, clips, null, false))
                 rejectedBatches++
             }
@@ -208,6 +231,7 @@ object MotionCapture {
         draws.clear()
         rejectedSections.clear()
         pending.clear()
+        lateSubmits.clear()
     }
 
     fun close() {

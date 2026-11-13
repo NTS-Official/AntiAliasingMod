@@ -52,6 +52,7 @@ dependencies {
     neoForge "net.neoforged:neoforge:${rootProject.neoforge_version}"
 
     api "dev.architectury:architectury-neoforge:${rootProject.architectury_api_version}"
+    architecturyTransformerClasspath("net.caffeinemc:sodium-fabric:${rootProject.sodium_version}+mc${rootProject.minecraft_version}") { transitive false }
 
     localRuntime("thedarkcolour:kotlinforforge-neoforge:${rootProject.kotlin_for_forge_version}") {
         exclude group: 'net.neoforged.fancymodloader', module: 'loader'

@@ -138,6 +138,16 @@ when available: open Video Settings, cycle AA modes, and check logs for mixin er
 Report which checks actually ran and any environment or dependency failures.
 Documentation-only changes do not require launching Gradle or Minecraft.
 
+Keep validation proportional to the change: cover the affected behavior and a
+specific regression risk, then stop once the required checks pass. Do not expand
+parameter or compatibility matrices without a concrete unresolved issue.
+Keep test fixtures, assertions, fault injection, automation and test-only probes
+outside production source sets and release jars. Temporary checks belong in
+isolated tools or a separate test source set; do not add test switches or branches
+to business code. Production F3 diagnostics are a user feature, not a test harness.
+TAA visual acceptance belongs to the user observing fixed settings over time;
+automated screenshots or repeated setting changes do not replace that observation.
+
 ## Implementation Conventions
 
 - Keep loader APIs in their platform modules. Shared code must not import
